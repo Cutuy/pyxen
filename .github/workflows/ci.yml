@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: mypy + ruff + pyxen test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package + dev extras + OpenAI SDK + example extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,openai,examples]"
+
+      - name: mypy (strict)
+        run: mypy src examples
+
+      - name: ruff lint
+        run: ruff check src examples
+
+      - name: "pyxen test (per-module _main() suite)"
+        run: pyxen-test
+
+      - name: "pyxen doctor (smoke: hello_runtime manifest)"
+        run: pyxen doctor examples/hello_runtime/runtime.json
+
+      - name: "Smoke test: hello_runtime example"
+        run: |
+          PYTHONPATH=src python examples/hello_runtime/main.py
+
+      - name: "Smoke test: data_pipeline example"
+        run: |
+          PYTHONPATH=src python examples/data_pipeline/pipeline.py

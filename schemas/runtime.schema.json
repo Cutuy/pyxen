@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Cutuy/pyxen/schemas/runtime.schema.json",
+  "title": "pyxen runtime config",
+  "description": "The runtime.json manifest that maps each primitive to an implementation. Authored per-deployment; the application code never reads it directly.",
+  "type": "object",
+  "required": ["version"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+$",
+      "description": "Manifest format version (integer string)."
+    },
+    "identity":        { "$ref": "#/$defs/primitive" },
+    "tokens":          { "$ref": "#/$defs/primitive" },
+    "ipc":             { "$ref": "#/$defs/primitive" },
+    "pkg":             { "$ref": "#/$defs/primitive" },
+    "storage":         { "$ref": "#/$defs/primitive" },
+    "secrets":         { "$ref": "#/$defs/primitive" },
+    "observability":   { "$ref": "#/$defs/primitive" }
+  },
+  "$defs": {
+    "primitive": {
+      "type": "object",
+      "required": ["implementation"],
+      "additionalProperties": false,
+      "properties": {
+        "implementation": {
+          "type": "string",
+          "description": "Module name under pyxen.impl.<primitive>. E.g., 'local_sqlite' resolves to pyxen.impl.storage.local_sqlite."
+        },
+        "config": {
+          "type": "object",
+          "description": "Implementation-specific config object. The schema is intentionally permissive; each impl validates its own config."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Portable Userland — A Userland Runtime for Portable Agents</title>
+<style>
+*,body{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0f;color:#e0e0e8;min-height:100vh;line-height:1.6}
+a{color:#1abc9c;text-decoration:none}
+a:hover{text-decoration:underline}
+code{background:rgba(255,255,255,.06);padding:2px 6px;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em;color:#1abc9c;border:1px solid rgba(255,255,255,.06)}
+pre{background:#0d0d14;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:14px 0;font-size:.78rem;line-height:1.55}
+pre code{background:none;border:none;padding:0;color:#cfd2d6;font-size:1em}
+.hero{min-height:60vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:80px 20px 60px;background:linear-gradient(180deg,#0a0a0f 0%,#041a16 60%,#0a0a0f 100%);position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(26,188,156,.10) 0%,transparent 55%);pointer-events:none}
+.hero .eyebrow{display:inline-block;background:rgba(26,188,156,.12);border:1px solid rgba(26,188,156,.3);color:#1abc9c;padding:5px 16px;border-radius:20px;font-size:.7rem;text-transform:uppercase;letter-spacing:2.5px;font-weight:600;margin-bottom:22px}
+.hero h1{font-size:clamp(2.2rem,5vw,3.6rem);font-weight:800;background:linear-gradient(135deg,#fff 0%,#1abc9c 80%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:18px;max-width:880px;line-height:1.1}
+.hero .tagline{font-size:1.15rem;color:rgba(255,255,255,.55);max-width:720px;line-height:1.6;margin-bottom:30px}
+.hero .meta{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;color:rgba(255,255,255,.35);font-size:.78rem}
+.hero .meta span{color:rgba(255,255,255,.55);font-weight:600}
+.nav{display:flex;gap:4px;padding:14px 20px;background:rgba(255,255,255,.025);border-bottom:1px solid rgba(255,255,255,.06);position:sticky;top:0;z-index:100;flex-wrap:wrap;justify-content:center;backdrop-filter:blur(8px)}
+.nav a{color:rgba(255,255,255,.5);text-decoration:none;font-size:.78rem;padding:6px 10px;border-radius:6px;transition:all .2s}
+.nav a:hover{color:#fff;background:rgba(255,255,255,.08);text-decoration:none}
+.nav a.active{color:#1abc9c;background:rgba(26,188,156,.12)}
+.section{padding:60px 20px;max-width:1100px;margin:0 auto}
+.section h2{font-size:1.8rem;font-weight:700;color:#fff;margin-bottom:6px;letter-spacing:-.01em}
+.section h2 .num{display:inline-block;color:#1abc9c;font-size:.85rem;font-weight:600;margin-right:12px;vertical-align:middle;background:rgba(26,188,156,.1);padding:3px 10px;border-radius:6px}
+.section .sub{color:rgba(255,255,255,.45);font-size:.92rem;margin-bottom:32px;max-width:800px}
+.section h3{font-size:1.15rem;font-weight:700;color:#fff;margin:28px 0 10px}
+.section p{color:rgba(255,255,255,.72);font-size:.95rem;margin-bottom:12px}
+.section ul,ol{color:rgba(255,255,255,.72);font-size:.95rem;padding-left:22px;margin-bottom:14px}
+.section li{margin-bottom:6px}
+.section strong{color:#fff;font-weight:600}
+.divider{border:none;border-top:1px solid rgba(255,255,255,.06);margin:0;max-width:1100px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.grid-2{grid-template-columns:repeat(auto-fit,minmax(380px,1fr))}
+.btn{display:inline-block;background:rgba(26,188,156,.15);border:1px solid rgba(26,188,156,.4);color:#1abc9c;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600;transition:all .2s;margin-top:8px;width:fit-content}
+.btn:hover{background:rgba(26,188,156,.25);color:#fff;text-decoration:none}
+.card{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:22px;transition:all .25s;display:flex;flex-direction:column;gap:8px}
+.card:hover{border-color:rgba(26,188,156,.35);transform:translateY(-1px)}
+.card h3{font-size:1.05rem;font-weight:700;color:#fff;margin:0}
+.card p{font-size:.85rem;color:rgba(255,255,255,.6);line-height:1.55;margin:0}
+.card .label{font-size:.65rem;text-transform:uppercase;letter-spacing:2px;color:#1abc9c;font-weight:700;margin-bottom:2px}
+.tag{display:inline-block;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);padding:3px 9px;border-radius:5px;font-size:.65rem;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-right:4px}
+.tag.teal{background:rgba(26,188,156,.12);border-color:rgba(26,188,156,.25);color:#1abc9c}
+.tag.amber{background:rgba(245,176,65,.12);border-color:rgba(245,176,65,.25);color:#f5b041}
+.tag.blue{background:rgba(93,173,226,.12);border-color:rgba(93,173,226,.25);color:#5dade2}
+.tag.purple{background:rgba(187,143,206,.12);border-color:rgba(187,143,206,.25);color:#bb8fce}
+.tag.red{background:rgba(231,76,60,.12);border-color:rgba(231,76,60,.25);color:#e74c3c}
+.callout{border-left:3px solid #1abc9c;padding:18px 22px;background:rgba(26,188,156,.05);border-radius:0 10px 10px 0;margin:18px 0;font-size:.92rem;color:rgba(255,255,255,.75)}
+.callout .label{font-size:.65rem;text-transform:uppercase;letter-spacing:2px;color:#1abc9c;font-weight:700;margin-bottom:6px;display:block}
+.callout.amber{border-color:#f5b041;background:rgba(245,176,65,.05)}
+.callout.amber .label{color:#f5b041}
+.callout.blue{border-color:#5dade2;background:rgba(93,173,226,.05)}
+.callout.blue .label{color:#5dade2}
+.callout.red{border-color:#e74c3c;background:rgba(231,76,60,.05)}
+.callout.red .label{color:#e74c3c}
+.primitive{background:rgba(255,255,255,.02);border:1px solid rgba(26,188,156,.2);border-left:4px solid #1abc9c;border-radius:12px;padding:24px;margin-bottom:18px}
+.primitive h3{color:#fff;margin:0 0 4px;font-size:1.2rem;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.primitive .unix{font-size:.7rem;color:#5dade2;background:rgba(93,173,226,.08);padding:3px 9px;border-radius:5px;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+.primitive .replaces{font-size:.72rem;color:rgba(255,255,255,.4);font-style:italic;margin:8px 0 10px}
+.primitive .replaces strong{color:#f5b041;font-style:normal}
+.primitive p{font-size:.88rem;color:rgba(255,255,255,.65);margin:0 0 8px}
+.table-wrap{overflow-x:auto;margin:18px 0;border:1px solid rgba(255,255,255,.08);border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+th,td{padding:12px 16px;text-align:left;border-bottom:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.7);vertical-align:top}
+th{color:rgba(255,255,255,.45);text-transform:uppercase;font-size:.65rem;letter-spacing:1.5px;font-weight:600;background:rgba(255,255,255,.025)}
+tr:last-child td{border-bottom:none}
+td strong{color:#fff}
+.ok{color:#2ecc71}.warn-c{color:#f5b041}.bad{color:#e74c3c}
+.layer-diagram{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:24px;margin:20px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;line-height:1.75;overflow-x:auto}
+.layer-diagram .app{color:#5dade2}.layer-diagram .runtime{color:#1abc9c}.layer-diagram .provider{color:#bb8fce}.layer-diagram .env{color:rgba(255,255,255,.3)}
+.timeline{position:relative;padding:8px 0 8px 30px;margin:20px 0}
+.timeline::before{content:'';position:absolute;left:8px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#1abc9c 0%,#bb8fce 100%)}
+.timeline-item{position:relative;margin-bottom:24px;padding-left:8px}
+.timeline-item::before{content:'';position:absolute;left:-27px;top:8px;width:14px;height:14px;border-radius:50%;background:#0a0a0f;border:2px solid #1abc9c}
+.timeline-item .year{font-size:.7rem;text-transform:uppercase;letter-spacing:2px;color:#1abc9c;font-weight:700;margin-bottom:3px}
+.timeline-item .title{font-size:1rem;font-weight:600;color:#fff;margin-bottom:4px}
+.timeline-item .desc{font-size:.85rem;color:rgba(255,255,255,.55);line-height:1.55}
+.metric-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:20px 0}
+.metric{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);padding:18px;border-radius:12px;text-align:center}
+.metric .val{font-size:1.55rem;font-weight:800;color:#1abc9c;line-height:1.1}
+.metric .lab{font-size:.65rem;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1.2px;margin-top:6px}
+.footer{padding:50px 20px 40px;text-align:center;color:rgba(255,255,255,.25);font-size:.75rem;border-top:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.2)}
+.footer span{display:block;margin-top:4px}
+@media(max-width:600px){.hero h1{font-size:2rem}.section{padding:40px 14px}.section h2{font-size:1.4rem}.primitive{padding:18px}}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+    <a href="#pivot">The Pivot</a>
+    <a href="#kernel-limits">Why Kernel</a>
+    <a href="#runtimedef">Runtime</a>
+    <a href="#primitives">7 Primitives</a>
+    <a href="#interface">Interface</a>
+    <a href="#providers">Providers</a>
+    <a href="#prior-art">Prior Art</a>
+    <a href="#critique">Critique</a>
+    <a href="#bet">The Bet</a>
+</nav>
+
+<div class="hero">
+    <div class="eyebrow">General-purpose Python app interface · OpenAI SDK pieces per-primitive · June 2026</div>
+    <h1>The Portable Userland</h1>
+    <p class="tagline">The runtime is a general-purpose application interface — not an agent framework. Any Python app imports it: CLIs, web apps, data pipelines. Apps that happen to embed agents get the same runtime. OpenAI's Agents SDK ships pieces we consume per-primitive; we don't wrap it as a single backend. A research note from a runtime engineer.</p>
+    <div class="meta">
+        <span>Response to:</span> The Missing Kernel (§04 — 8 Primitives)
+        <span>·</span>
+        <span>Thesis:</span> Runtime is general-purpose; SDK is a source of pieces
+        <span>·</span>
+        <span>Scope:</span> 2026 industry signals + research
+    </div>
+</div>
+
+<!-- ============================== -->
+<!-- 1. THE PIVOT                   -->
+<!-- ============================== -->
+<section class="section" id="pivot">
+    <h2><span class="num">01</span>The Pivot</h2>
+    <p class="sub">"The Missing Kernel" argued that the agent world needs 8 OS-level primitives. This deck argues the opposite: the most impactful layer isn't the kernel — it's a <em>general-purpose</em> userland runtime that <em>any</em> application can link against, regardless of whether that application contains agents.</p>
+
+    <p>The runtime isn't a layer above agents. It isn't a layer above OpenAI's Agents SDK. It is the <strong>interface an application uses to talk to its environment</strong> — including any agents embedded in that application. The app shell uses it. The agents inside use it. The boundary between them uses it. <strong>Intertwined, not layered.</strong></p>
+
+    <p>The Missing Kernel is right that we need primitives. It's wrong about <em>where</em> they should live.</p>
+
+    <p><strong>Kernel primitives</strong> require:
+    <ul>
+        <li>A kernel module, an eBPF program, or a Linux Foundation proposal → vendor lock-in (Linux vs Windows vs macOS vs mobile)</li>
+        <li>Root access on every machine the agent runs on</li>
+        <li>A deploy target that can host a real OS</li>
+        <li>Deep coupling to a specific OS ABI</li>
+    </ul></p>
+
+    <p><strong>Userland runtime</strong> requires:
+    <ul>
+        <li><code>pip install &lt;runtime&gt;</code> (one command — the rest is a <code>runtime.json</code>)</li>
+        <li>A config file (<code>runtime.json</code>) that binds each primitive to a provider</li>
+        <li>That's it. The app is portable.</li>
+    </ul></p>
+
+    <p>The insight: <strong>an application's "environment" is not the kernel — it's the set of ambient resources the app needs to run.</strong> Identity (who am I calling on behalf of?), credentials (my GitHub PAT, my OpenAI key), token budgets (how much can I spend?), package dependencies (what libraries do I need?), IPC routes (who else is running?), storage (where do my files live?), observability (where do my logs go?). Every single one of these is a userland concern, not a kernel concern.</p>
+
+    <div class="callout">
+        <span class="label">The one-sentence pivot</span>
+        The Missing Kernel asks "what would <code>agent_fork(2)</code> look like?" This deck asks: <strong>"what would an <code>npm install</code>-able runtime look like that makes the kernel primitive choice irrelevant to the application developer?"</strong> The answer is a userland runtime that captures all environment-shaped concerns behind a stable, versioned, and swappable interface.
+    </div>
+
+    <div class="callout blue">
+        <span class="label">The relationship to OpenAI's Agents SDK</span>
+        The runtime is not a competitor to OpenAI's Agents SDK. It is the <strong>interface</strong>; OpenAI's SDK is one possible <strong>backend</strong> for several primitives (workspace, manifest, handoffs, storage mounts). The runtime can route <code>pkg</code> through an OpenAI Manifest, route <code>ipc</code> through OpenAI handoffs, route <code>secrets</code> through the SDK's env injection — while the same runtime also serves the app's non-agent code paths (UI, business logic, I/O). Same package, same primitives, same config. The SDK is a provider, not a layer.
+    </div>
+
+    <h3>The two theses compared</h3>
+    <div class="table-wrap">
+    <table>
+        <thead>
+            <tr><th>Dimension</th><th>The Missing Kernel</th><th>The Portable Userland</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Primitives target</td><td>OS kernel (syscalls, kernel modules)</td><td>Package management (SDK, manifest, interface)</td></tr>
+            <tr><td>Integration</td><td>eBPF, FUSE, kernel patches, vendor SDKs</td><td><code>npm install</code>, <code>pip install</code>, a <code>runtime.json</code> config</td></tr>
+            <tr><td>Portability mechanism</td><td>Same syscalls on every OS</td><td>Swappable providers per environment</td></tr>
+            <tr><td>Adoption barrier</td><td>Very high (kernel access needed, vendor lock)</td><td>Low (standard package integration)</td></tr>
+            <tr><td>Cloud port</td><td>Must recompile/re-vendor for cloud kernel</td><td>Swap <code>runtime.json</code> → same app runs</td></tr>
+            <tr><td>Fragmentation risk</td><td>Windows vs Linux vs macOS kernel APIs</td><td>Multi-environment, same runtime interface</td></tr>
+        </tbody>
+    </table>
+    </div>
+
+    <p><strong>The two theses are complements, not competitors.</strong> Kernel primitives provide <em>isolation and enforcement</em>. Userland runtimes provide <em>portability and abstraction</em>. You need both. But if you have to pick which one to ship first, userland wins because it's immediately consumable by any application developer, on any machine, today.</p>
+</section>
+
+<hr class="divider"/>
+
+<!-- ============================== -->
+<!-- 2. WHY KERNEL PRIMITIVES AREN'T ENOUGH -->
+<!-- ============================== -->
+<section class="section" id="kernel-limits">
+    <h2><span class="num">02</span>Why Kernel Primitives Aren't Enough</h2>
+    <p class="sub">A thought experiment: suppose the 8 primitives are real Linux syscalls. Does it make your app portable?</p>
+
+    <p>Imagine tomorrow the Linux kernel adds <code>agent_fork(2)</code> and <code>agent_send(2)</code> and every Missing Kernel primitive exists at <code>syscall</code> level. Your OpenClaw app now uses <code>agent_fork(2)</code> for speculative execution. Great.</p>
+
+    <p><strong>But your app still needs:</strong></p>
+
+    <ol>
+        <li><strong>An identity.</strong> When it calls <code>github.createPR()</code>, whose token does it use? The kernel has no concept of a GitHub PAT or an OIDC token. Your app still needs a credential broker that lives in userland.</li>
+        <li><strong>A token budget.</strong> Who decides the app gets $10/day? The kernel can <em>enforce</em> a cap (resource group), but the cap is configured per-deployment — the budget policy lives in userland config.</li>
+        <li><strong>Package dependencies.</strong> Your agent needs to install <code>numpy</code>, <code>requests</code>, <code>playwright</code>. The kernel doesn't have a package manager. <code>apt</code> is userland. <code>npm</code> is userland. <code>pip</code> is userland. The agent's list of dependencies is an environment fact.</li>
+        <li><strong>IPC routes.</strong> Who is the agent allowed to talk to? What addresses? What ports? The kernel knows packet routing; it doesn't know that "Codex Research Agent" is at <code>/agents/codex.sock</code>. Service discovery is userland.</li>
+        <li><strong>Secrets / credentials.</strong> The app needs its OpenAI API key. The kernel doesn't have a secrets store. Keychain is userland. Vault is userland. Environment variables are userland. The <em>same</em> app uses different secrets in different environments.</li>
+        <li><strong>Observability sink.</strong> Where do traces go? Langfuse? A local file? stdout? The kernel provides <code>perf_event_open(2)</code>; it doesn't know about OpenTelemetry endpoints. Sink configuration is userland.</li>
+        <li><strong>Storage backend.</strong> Where does persistent state live? SQLite on disk? Postgres? S3? The kernel provides VFS; the binding to a specific storage provider is userland.</li>
+    </ol>
+
+    <div class="callout amber">
+        <span class="label">The insight</span>
+        Every single item in that list is <strong>environment-shaped</strong>. It differs between local, staging, and production. It differs between laptop and cloud. It differs between "Jason's workstation" and "someone else's OpenClaw instance." <strong>The kernel can't fix this because the kernel doesn't know about application-level environment.</strong> Only a userland runtime can.
+    </div>
+
+    <p>The Missing Kernel's 8 primitives are great <em>enforcement</em> primitives — they give you real signals, real isolation, real cgroup-style enforcement. But they don't solve the portability problem. They solve the <em>guarantee</em> problem. The portability problem requires a different abstraction: <strong>a userland runtime that captures environment and exposes it as a programmable interface.</strong></p>
+</section>
+
+<hr class="divider"/>
+
+<!-- ============================== -->
+<!-- 3. WHAT IS A USERLAND RUNTIME   -->
+<!-- ============================== -->
+<section class="section" id="runtimedef">
+    <h2><span class="num">03</span>What Is a Userland Runtime?</h2>
+    <p class="sub">A library. A config file. A set of interfaces. That's it. No kernel patches, no FUSE, no vendor lock.</p>
+
+    <p>The <strong>Portable Userland Runtime</strong> is a single Python package that provides a small set of primitive interfaces. <em>Any</em> application imports it — not just agents. A web app imports it. A CLI imports it. A data pipeline imports it. An app that happens to contain one or more agents imports it for the app shell, the agent code, and the boundary between them. The runtime routes each call to a <em>provider</em> — a concrete implementation of the interface for the current environment.</p>
+
+    <p>An application built on this runtime is <strong>naturally portable</strong> because every environment-shaped interaction goes through the runtime. The application never knows whether identity comes from the macOS keychain or an OIDC provider. It never knows whether storage is SQLite on disk or Postgres in the cloud. It never knows whether its agents use OpenAI's SDK, Anthropic's SDK, or a local model. It just calls <code>runtime.identity()</code>, <code>runtime.storage()</code>, <code>runtime.ipc()</code>.</p>
+
+    <p>OpenAI's Agents SDK is not a wrapped <em>provider</em>. Its individual libraries (<code>SandboxClient</code>, <code>Manifest</code>, <code>handoffs</code>, <code>tracing</code>, <code>apply_patch</code>, <code>shell</code>) are sources of <em>primitive implementations</em>: <code>pkg</code> consumes <code>Manifest</code>, <code>secrets</code> consumes <code>Manifest.environment</code>, <code>ipc</code> consumes handoff semantics, and so on. The runtime can also draw on non-OpenAI pieces for the same primitive. <strong>No single SDK is "the backend." Each primitive has implementations drawn from wherever they make sense.</strong></p>
+
+    <h3>The architecture in one diagram</h3>
+    <div class="layer-diagram">
+<span class="app">┌────────────────────────────────────────────────────────────────────┐</span>
+<span class="app">│  PYTHON APPLICATION  — web app · CLI · data pipeline · w/ agents   │</span>
+<span class="app">│  from pyxen import Runtime                                            │</span>
+<span class="app">│  rt = await Runtime.load("runtime.json")                          │</span>
+<span class="app">│  me = await rt.identity.current()           # app shell          │</span>
+<span class="app">│  agent = await rt.agents.spawn(...)         # inside app        │</span>
+<span class="app">│  await rt.ipc.send(agent, msg)              # boundary          │</span>
+<span class="app">└────────────────────────────────┬───────────────────────────────────┘</span>
+                                 │
+<span class="runtime">┌────────────────────────────────▼───────────────────────────────────┐</span>
+<span class="runtime">│  USERLAND RUNTIME  — one Python interface, 7 primitives             │</span>
+<span class="runtime">│  identity · tokens · ipc · pkg · storage · secrets · observability │</span>
+<span class="runtime">└────────────────────────────────┬───────────────────────────────────┘</span>
+                                 │  <span style="color:#f5b041">runtime.json binds interfaces to implementations</span>
+<span class="provider">┌────────────────────────────────▼───────────────────────────────────┐</span>
+<span class="provider">│  IMPL LAYER  — per-primitive sub-packages; each impl can           │</span>
+<span class="provider">│               reach into OpenAI SDK pieces (or any other source)   │</span>
+<span class="provider">│  impl/storage/        ← local_sqlite · cloud_s3_via_openai_mounts │</span>
+<span class="provider">│  impl/identity/       ← env · keychain · oidc · agent_auth_proto   │</span>
+<span class="provider">│  impl/ipc/            ← unix_socket · openai_handoffs · nats      │</span>
+<span class="provider">│  impl/pkg/            ← pip · openai_manifest · docker             │</span>
+<span class="provider">│  impl/secrets/        ← dotenv · keychain · openai_env_injection   │</span>
+<span class="provider">│  impl/observability/  ← stdout · otel · openai_tracing · langfuse  │</span>
+<span class="provider">│  impl/tokens/         ← json_budget (runtime-native; no SDK piece)│</span>
+<span class="provider">└────────────────────────────────┬───────────────────────────────────┘</span>
+                                 │
+<span class="env">┌────────────────────────────────▼───────────────────────────────────┐</span>
+<span class="env">│  RAW ENVIRONMENT  — the machine, the cloud, the OS                │</span>
+<span class="env">│  (what the kernel sees; what the runtime abstracts over)          │</span>
+<span class="env">└────────────────────────────────────────────────────────────────────┘</span>
+    </div>
+
+    <p><strong>The key innovation:</strong> every interaction that depends on <em>where</em> the app is running goes through the runtime. The app talks to <code>runtime.identity</code>, not to <code>$KEYCHAIN</code> or <code>$OIDC_PROVIDER</code>. The runtime talks to the provider. The provider is swappable per deployment.</p>
+
+    <div class="callout">
+        <span class="label">The runtime contract</span>
+        <strong>The runtime</strong> provides the interface. <strong>The config</strong> (<code>runtime.json</code>) maps interfaces to providers. <strong>The app</strong> never imports or configures providers directly. This is the separation that makes portability real: the app imports the runtime, and the runtime resolves at startup which providers to use based on the deployment environment.
+    </div>
+
+    <h3>Intertwined, not layered</h3>
+    <p>The runtime is <strong>not</strong> a layer above OpenAI's Agents SDK. It is not a layer above LangGraph, CrewAI, or AutoGen. It is the interface the application uses for environment-shaped concerns. When an app embeds an OpenAI agent, <em>the app and the agent both call the same runtime</em>:</p>
+
+    <pre><code># App shell uses runtime for non-agent code paths
+me = await rt.identity.current()
+await rt.tokens.check("gpt-4o", 5000)
+
+# App spawns an OpenAI agent (built from SDK pieces via the runtime)
+agent = await rt.agents.spawn(
+    model="gpt-5.5",
+    manifest={"entries": {...}},        # OpenAI Manifest shape
+    capabilities=["shell", "filesystem"],
+)
+
+# The agent's own code uses the SAME runtime primitives
+# (same identity, same budget, same IPC routes)
+agent_reply = await rt.ipc.send(agent, {"type": "do-work"})</code></pre>
+
+    <p>The agent doesn't live in a different runtime. The app shell doesn't live in a different runtime. They share one. OpenAI's SDK pieces (<code>Manifest</code>, <code>SandboxClient</code>, <code>handoffs</code>, <code>tracing</code>) are consumed individually as primitive implementations — the runtime doesn't wrap the SDK as a single backend. The agent's tool calls, the app's HTTP handlers, the IPC between them — all use the same runtime.</p>
+
+    <p><strong>But the MVP demos are agent-less apps.</strong> The runtime's primary value is making <em>any</em> Python app portable. A CLI, a web app, a data pipeline — none of these need agents. The fact that an app <em>could</em> later host an agent (because someone embedded one, or because an agent generated the app in the first place) is a future benefit, not a v0 requirement. <strong>The runtime is general-purpose; agents are an optional consumer.</strong></p>
+</section>
+
+<hr class="divider"/>
+
+<!-- ============================== -->
+<!-- 4. THE 7 PRIMITIVES            -->
+<!-- ============================== -->
+<section class="section" id="primitives">
+    <h2><span class="num">04</span>The Seven Userland Primitives</h2>
+    <p class="sub">Each is an interface on the runtime object. Each has multiple providers. Each captures one "environment fact" that differs between deployments.</p>
+
+    <div class="primitive">
+        <h3>① Identity <span class="unix">Interface: runtime.identity</span></h3>
+        <p class="replaces">Replaces: hard-coded PAT loading, macOS keychain access, <code>$GITHUB_TOKEN</code> env vars, OIDC login scripts, credential files checked into repos</p>
+        <p>The identity primitive answers one question: <strong>"who is this agent on behalf of?"</strong> It provides: the current user's ID, a set of delegated credentials, an authentication context (OAuth flow state, OIDC tokens), and a way to escalate or reauthenticate. The runtime handles credential lifecycle — refresh, rotation, expiry — transparently to the application.</p>
+        <p><strong>Providers:</strong> macOS Keychain, OIDC (Google / Microsoft / GitHub), OAuth device flow, PKI certificate, <code>.env</code> file (dev only), HashiCorp Vault, Agent Identity Kit (portable DID-based identities)</p>
+    </div>
+
+    <div class="primitive">
+        <h3>② Token Usage &amp; Limits <span class="unix">Interface: runtime.tokens</span></h3>
+        <p class="replaces">Replaces: "maxTokens" in construction sites, <code>$OPENAI_KEY</code> env vars, app-level token budgets, manual cost tracking spreadsheets</p>
+        <p>The token primitive is the userland <strong>cgroup for AI costs</strong>. It tracks token consumption, enforces budgets, and provides a check-before-spend interface. <code>runtime.tokens.check(modelName, estimatedTokens)</code> returns <code>{ allowed: boolean, remaining: number, reason?: string }</code>. The runtime enforces the policy — if the budget is exhausted, the call fails with a clear error, not a surprise bill.</p>
+        <p><strong>Why this can't be a kernel primitive:</strong> Token budgets are measured in <em>dollars and model-specific token counts</em>, not in CPU cycles or memory. The kernel doesn't know what a "GPT-4o token" is. A userland runtime, with access to model pricing tables and billing data, does.</p>
+        <p><strong>Providers:</strong> Local JSON budget file, OpenClaw session budget, App-level quota manager, Langfuse spend tracking, API gateway rate-limit headers, Prometheus metrics</p>
+    </div>
+
+    <div class="primitive">
+        <h3>③ IPC <span class="unix">Interface: runtime.ipc</span></h3>
+        <p class="replaces">Replaces: HTTP between agents, A2A protocol, MCP client/server setup, Unix socket path hardcoding, message queue boilerplate</p>
+        <p>The IPC primitive provides <strong>agent-to-agent communication as a first-class runtime service</strong>. One agent discovers another by name, sends a structured message, and receives a response (or subscribes to a stream). The runtime handles transport, addressing, serialization, backpressure, retry, and auth — the application just sends messages.</p>
+        <p><strong>Providers:</strong> Unix socket (local), TCP with mutual TLS (network), NATS (cloud), Redis Pub/Sub, SQS (async), in-memory (same process), A2A-over-HTTP (interoperability)</p>
+    </div>
+
+    <div class="primitive">
+        <h3>④ Package Manager <span class="unix">Interface: runtime.pkg</span></h3>
+        <p class="replaces">Replaces: <code>pip install</code> in Dockerfiles, <code>npm install</code> at app bootstrap, brew/apt-get in setup scripts, manual dependency management per environment</p>
+        <p>The package manager primitive declares <strong>what runtime dependencies an agent needs</strong>, and the runtime satisfies them. <code>runtime.pkg.ensure("numpy>=2.0")</code> installs numpy if it's not already available. The runtime caches, resolves conflicts, and handles cross-language dependency graphs. The app declares deps; the runtime satisfies them.</p>
+        <p><strong>Why this is environment-shaped:</strong> On a developer's laptop you might use <code>pip install --user</code>. On a cloud sandbox you want <code>pip install --target /workspace/.deps</code>. On a Docker container the deps are already installed in the image. The app shouldn't know the difference.</p>
+        <p><strong>Providers:</strong> pip (Python), npm (Node.js), uv (fast Python), conda (data science), brew (macOS), apt (Debian), Nix (declarative), MicroVM snapshot (pre-baked deps)</p>
+    </div>
+
+    <div class="primitive">
+        <h3>⑤ Storage <span class="unix">Interface: runtime.storage</span></h3>
+        <p class="replaces">Replaces: <code>fs.writeFile</code> with hard-coded paths, SQLite file paths in code, S3 bucket ARNs, Postgres connection strings</p>
+        <p>The storage primitive provides <strong>a uniform key-value or document-store interface</strong> for persistent state. The app writes key-value pairs; the runtime routes them to the configured backend. No path strings, no connection strings, no SQL dialects — just <code>runtime.storage.put(namespace, key, value)</code> and <code>runtime.storage.get(namespace, key)</code>.</p>
+        <p><strong>Providers:</strong> SQLite (local), Postgres (shared), S3/MinIO (cloud), Redis (ephemeral), JSONL file (OpenClaw session format), in-memory Map (testing)</p>
+    </div>
+
+    <div class="primitive">
+        <h3>⑥ Secrets <span class="unix">Interface: runtime.secrets</span></h3>
+        <p class="replaces">Replaces: <code>.env</code> files, <code>os.environ["OPENAI_API_KEY"]</code>, <code>process.env.GITHUB_TOKEN</code>, secrets committed to git, SSH keys in agent context</p>
+        <p>The secrets primitive provides <strong>named, audited access to credentials</strong>. The app calls <code>runtime.secrets.get("openai-api-key")</code>. The runtime resolves the secret from the configured backend. Every access is logged. Secrets are never exposed to the prompt context or to tool execution.</p>
+        <p><strong>Providers:</strong> macOS Keychain (local), HashiCorp Vault (enterprise), 1Password CLI, <code>.env</code> file (development, not committed), AWS Secrets Manager, GCP Secret Manager, Kubernetes Secrets</p>
+    </div>
+
+    <div class="primitive">
+        <h3>⑦ Observability <span class="unix">Interface: runtime.observe</span></h3>
+        <p class="replaces">Replaces: <code>console.log</code> with environment-dependent sinks, hard-coded Langfuse endpoints, OTel configuration per deployment</p>
+        <p>The observability primitive provides <strong>structured, routable telemetry</strong>. The app emits traces, logs, and metrics through the runtime. The runtime routes them to the configured sink. The app never knows whether telemetry goes to Langfuse, file, stdout, or an OTel collector.</p>
+        <p><strong>Providers:</strong> Langfuse, OpenLLMetry/Otel, stdout (dev), file (server), Prometheus (metrics), Phoenix (traces), custom webhook</p>
+    </div>
+
+    <div class="callout amber">
+        <span class="label">What about filesystem and process?</span>
+        The Missing Kernel's <strong>filesystem</strong> (AgentFS) and <strong>process</strong> primitives are absent here intentionally. Filesystem access through a tool bound to the host path is a <em>kernel-level concern</em> — the kernel provides VFS, namespaces, overlayfs, and all the isolation an agent needs. The userland runtime doesn't need to re-abstract files. It needs to abstract <strong>everything that's not files</strong> — the environment-shaped concerns the kernel doesn't know about. That's the gap.
+    </div>
+
+    <h3>How these primitives draw on OpenAI's SDK pieces</h3>
+    <p>OpenAI's Agents SDK ships pieces that we consume per-primitive — not as a single wrapped backend. The runtime is free to use OpenAI's piece, a non-OpenAI piece, or our own implementation for any given primitive:</p>
+
+    <div class="table-wrap">
+    <table>
+        <thead>
+            <tr><th>Runtime primitive</th><th>OpenAI SDK piece used</th><th>Other viable implementations</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>runtime.pkg</code></td>
+                <td><code>Manifest</code> (files, dirs, git repos, mounts, env, users)</td>
+                <td>Nix flakes, Docker layers, local file tree, conda env spec</td>
+            </tr>
+            <tr>
+                <td><code>runtime.storage</code></td>
+                <td>Workspace files + storage mounts (S3/GCS/R2/Box/Azure)</td>
+                <td>SQLite, Postgres, JSONL file, in-memory</td>
+            </tr>
+            <tr>
+                <td><code>runtime.secrets</code></td>
+                <td><code>Manifest.environment</code> (ephemeral flag) + mount credentials</td>
+                <td>macOS Keychain, Vault, <code>.env</code> file, K8s Secrets</td>
+            </tr>
+            <tr>
+                <td><code>runtime.ipc</code></td>
+                <td>Handoffs (agent-to-agent) + port exposure</td>
+                <td>Unix socket, NATS, Redis Pub/Sub, SQS, in-process queue</td>
+            </tr>
+            <tr>
+                <td><code>runtime.observability</code></td>
+                <td>Agents SDK tracing</td>
+                <td>OpenTelemetry, Langfuse, stdout/file, Phoenix</td>
+            </tr>
+            <tr>
+                <td><code>runtime.identity</code></td>
+                <td>Per-agent cryptographic identity (if embedded agent uses it)</td>
+                <td>OIDC, macOS Keychain, Agent Auth Protocol, dev <code>.env</code></td>
+            </tr>
+            <tr>
+                <td><code>runtime.tokens</code></td>
+                <td><em>No SDK piece</em> (OpenAI bills via API pricing, not runtime enforcement)</td>
+                <td>Runtime-native: JSON budget, DynamoDB, OTel-derived spend</td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+
+    <p><strong>Six primitives</strong> can draw on a piece of the OpenAI SDK. <strong>One</strong> (<code>tokens</code>) has no SDK piece at all — it's genuinely runtime-native. The runtime does <em>not</em> wrap the SDK as a provider; it consumes its pieces <em>individually</em> alongside non-OpenAI pieces, and the <code>runtime.json</code> decides which piece to use per deployment.</p>
+</section>
+
+<hr class="divider"/>
+
+<!-- ============================== -->
+<!-- 5. THE INTERFACE               -->
+<!-- ============================== -->
+<section class="section" id="interface">
+    <h2><span class="num">05</span>The Interface</h2>
+    <p class="sub">Concrete code. What the application sees. Simple enough that no one needs a framework guide.</p>
+
+    <h3>Startup: load the runtime config</h3>
+    <pre><code>from runtime import Runtime
+
+rt = await Runtime.load("runtime.json")
+# rt is now configured with the right implementations for this environment</code></pre>
+
+    <h3>Identity: who's calling?</h3>
+    <pre><code>me = await rt.identity.current()
+# Identity(id="jason@...", source="keychain", name="Jason Cui")
+
+github = await rt.identity.for_target("github.com")
+# Credential(token="ghp_...", expires_at=...)
+
+openai = await rt.identity.for_target("api.openai.com")
+# Credential(api_key="sk-proj-...", org_id="org-...")</code></pre>
+
+    <h3>Token budget: can I spend?</h3>
+    <pre><code>check = await rt.tokens.check("gpt-4o", 5000)
+# CheckResult(allowed=True, remaining=15000, budget=Budget(daily=50000, spent=35000))
+
+# After the call finishes, charge it:
+await rt.tokens.charge("gpt-4o", tokens=actual_tokens, dollars=actual_cost)
+
+# If budget is exceeded:
+fail = await rt.tokens.check("claude-opus", 10000)
+# CheckResult(allowed=False, remaining=0, reason="Daily budget exhausted")</code></pre>
+
+    <h3>IPC: talk to another process or agent</h3>
+    <pre><code># Send a request and wait for reply
+reply = await rt.ipc.send("research-agent", {"type": "research", "query": "..."})
+
+# Subscribe to a stream
+async for msg in rt.ipc.subscribe("price-alerts"):
+    print("Price alert:", msg.data)</code></pre>
+
+    <h3>Package manager: ensure dependencies</h3>
+    <pre><code># Ensure python deps
+await rt.pkg.ensure_python(["numpy>=2.0", "pandas>=2.2", "httpx"])
+
+# Or load from a pyproject.toml
+await rt.pkg.ensure_from_manifest("pyproject.toml")</code></pre>
+
+    <h3>Storage: persist state</h3>
+    <pre><code>await rt.storage.put("sessions", "session-abc", {"status": "completed", "result": "..."})
+session = await rt.storage.get("sessions", "session-abc")
+# {"status": "completed", "result": "..."}
+
+# Query (provider-dependent)
+recent = await rt.storage.query("sessions", filter={"status": "completed"}, limit=10)</code></pre>
+
+    <h3>Secrets: get credentials</h3>
+    <pre><code>api_key = await rt.secrets.get("openai-api-key")
+# Returns "sk-proj-..."
+# Every access is logged. Never exposed to a model context window.</code></pre>
+
+    <h3>Observability: emit telemetry</h3>
+    <pre><code>async with rt.observe.trace("agent-run") as span:
+    span.set_attribute("model", "gpt-4o")
+    span.log("info", "Starting research workflow")
+    result = await do_research()
+    span.set_attribute("result_length", len(result))
+    return result</code></pre>
+
+    <div class="callout blue">
+        <span class="label">The developer experience</span>
+        Every piece of environment-shaped code is gone. No <code>process.env</code>. No <code>$KEYCHAIN</code>. No hard-coded paths. No connection strings. The app calls <code>runtime.X()</code>. The runtime handles the environment. <strong>The app is portable by construction.</strong>
+    </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- ============================== -->
+<!-- 6. THE PROVIDER MODEL          -->
+<!-- ============================== -->
+<section class="section" id="providers">
+    <h2><span class="num">06</span>The Provider Model</h2>
+    <p class="sub">Same interface. Different environments. One config file controls which providers are active.</p>
+
+    <p><code>runtime.json</code> is the single environment-definition artifact. It maps each primitive to an implementation with its own configuration. The app never touches it at import time — <code>Runtime.load()</code> reads it at startup and wires everything up.</p>
+
+    <pre><code>{
+  "version": "1",
+  "identity": {
+    "implementation": "keychain",
+    "config": { "service": "runtime-default" }
+  },
+  "tokens": {
+    "implementation": "json-budget",
+    "config": {
+      "path": "./budget.json",
+      "defaults": {
+        "daily": 50000,
+        "models": {
+          "gpt-4o": { "cost_per_1k": 0.01, "input_cost_per_1k": 0.0025 }
+        }
+      }
+    }
+  },
+  "ipc": {
+    "implementation": "unix-socket",
+    "config": { "path": "/tmp/runtime-ipc" }
+  },
+  "pkg": {
+    "implementation": "pip",
+    "config": { "cache_dir": "~/.cache/runtime-deps", "python": "python3.12" }
+  },
+  "storage": {
+    "implementation": "sqlite",
+    "config": { "path": "./runtime-data.db" }
+  },
+  "secrets": {
+    "implementation": "keychain",
+    "config": { "service": "runtime-secrets" }
+  },
+  "observability": {
+    "implementation": "stdout",
+    "config": { "level": "debug", "format": "json" }
+  }
+}</code></pre>
+
+    <p><strong>Same app, two configs:</strong></p>
+
+    <div class="grid grid-2">
+        <div class="card">
+            <span class="label">Local (Python dev workstation)</span>
+            <p><code>runtime.json</code> uses: keychain + JSON budget + unix-socket + pip + SQLite + stdout. Zero external dependencies, starts in 50ms, runs fully offline. The same app executes identically to cloud — just slower and with local state. <em>Note: the app is a plain Python CLI or web app. No agents required.</em></p>
+        </div>
+        <div class="card">
+            <span class="label">Cloud (shared OpenClaw / sandbox)</span>
+            <p><code>runtime.json</code> uses: OIDC + DynamoDB budget + NATS + pre-baked deps + Postgres + Vault + OTel collector. Full isolation, shared state, cost enforcement, audit trail. The same app, no code changes. <em>Same plain Python app; agents are an optional add-on if the app later needs them.</em></p>
+        </div>
+    </div>
+
+    <h3>Same app, OpenAI's SDK pieces consumed per-primitive</h3>
+    <p>The same runtime can draw on individual pieces of the OpenAI Agents SDK for each primitive. The runtime doesn't import <em>the SDK</em> — it imports the pieces it needs (e.g., <code>from openai.agents import Manifest, SandboxClient, handoffs</code>) and uses them where they fit. The app's source code never imports the OpenAI SDK at all.</p>
+
+    <pre><code>{
+  "version": "1",
+  "pkg": {
+    "implementation": "openai-manifest",
+    "config": {
+      "manifest": {
+        "entries": {
+          "AGENTS.md": { "file": { "content": "..." } },
+          "task.md":   { "file": { "content": "..." } }
+        }
+      }
+    }
+  },
+  "storage":  { "implementation": "openai-mount-s3",  "config": { "bucket": "..." } },
+  "secrets":  { "implementation": "openai-env-injection", "config": { "ephemeral": true } },
+  "ipc":      { "implementation": "openai-handoffs",  "config": {} },
+  "observability": { "implementation": "openai-tracing", "config": {} },
+  "tokens":   { "implementation": "runtime-native-budget", "config": { "path": "..." } },
+  "identity": { "implementation": "oidc", "config": { "issuer": "..." } }
+}</code></pre>
+
+    <p>The app's source code is identical to the local config above. The only thing that changed is <em>which pieces</em> the runtime uses for each primitive. The OpenAI SDK is not wrapped as a backend; its libraries are consumed as sources of implementations. The runtime could swap any of them out for a non-OpenAI piece (Anthropic tracing, Vault for secrets, NATS for IPC) without changing app code.</p>
+
+    <div class="callout">
+        <span class="label">The portability guarantee</span>
+        The application code is <strong>identical</strong> in both environments. The only thing that changes is <code>runtime.json</code>. This is the userland runtime version of the "12-factor app" — a portable app doesn't compile for the cloud; it just points to a different config.
+    </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- ============================== -->
+<!-- 7. PRIOR ART & RESEARCH        -->
+<!-- ============================== -->
+<section class="section" id="prior-art">
+    <h2><span class="num">07</span>Prior Art &amp; Recent Research</h2>
+    <p class="sub">This isn't a new idea. The industry is converging on the same pattern from multiple directions. Here's what's already out there.</p>
+
+    <h3>Direct parallels</h3>
+
+    <div class="card" style="margin-bottom:14px">
+        <span class="tag blue">WASI</span>
+        <h3>WebAssembly System Interface (Bytecode Alliance)</h3>
+        <p><strong>Idea:</strong> A standardized system interface for WebAssembly modules. The host provides APIs for filesystem, clocks, random, sockets. The module imports <code>wasi_snapshot_preview1</code>. The host implements it. <strong>Same WASM + different WASI host = different environment.</strong></p>
+        <p><strong>Relevance:</strong> The closest existing realization of the userland runtime pattern. WASI proves that a portable runtime interface can abstract OS differences. The Portable Userland applies the same pattern to <em>application-level</em> environment concerns (identity, tokens, secrets, packages) that WASI doesn't cover.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+        <span class="tag teal">OpenAI Agents SDK · Apr 2026</span>
+        <h3>Manifest Abstraction &amp; SDK Pieces</h3>
+        <p><strong>Idea:</strong> OpenAI's April 2026 Agents SDK update introduces a "Manifest abstraction" that <em>"describe[s] an agent's workspace to make environments portable across different providers."</em> Supported sandbox providers: Blaxel, Cloudflare, Daytona, E2B, Modal, Runloop, Vercel. The same agent workspace manifest maps to any sandbox. The SDK also ships <code>handoffs</code> for inter-agent IPC, <code>tracing</code> for observability, and <code>apply_patch</code> / <code>shell</code> tools.</p>
+        <p><strong>Relevance:</strong> OpenAI's SDK is the best existing source of <em>pieces</em> for the runtime's primitives. The runtime does <strong>not</strong> wrap the SDK as a single provider — it consumes individual libraries (<code>Manifest</code>, <code>SandboxClient</code>, <code>handoffs</code>, <code>tracing</code>) as implementations for the relevant primitives, and writes its own where the SDK has no piece (notably <code>tokens</code> budget enforcement). The runtime can also use non-OpenAI pieces for the same primitives. <strong>Use the SDK's pieces where they fit. Don't replace them. Don't treat them as a single backend.</strong></p>
+        <p><strong>Source:</strong> OpenAI blog, April 16, 2026 · <a href="https://developers.openai.com/api/docs/guides/agents/sandboxes">OpenAI sandbox docs</a></p>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+        <span class="tag teal">OpenHands SDK · arXiv 2511.03690v2</span>
+        <h3>Workspace Abstraction</h3>
+        <p><strong>Idea:</strong> OpenHands provides a "workspace abstraction" that "enables agents to run locally or in secure, containerized environments with minimal code changes." The SDK separates the agent's harvest (logic) from its compute environment.</p>
+        <p><strong>Relevance:</strong> Confirms the <em>harvest/environment separation</em> pattern. The workspace abstraction is one primitive in the userland runtime model (storage + pkg combined). OpenHands' approach validates the portable interface pattern at an SDK level.</p>
+        <p><strong>Source:</strong> arXiv 2511.03690, revised April 2026</p>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+        <span class="tag purple">Agent Auth Protocol · 2026</span>
+        <h3>Cryptographic Agent Identity</h3>
+        <p><strong>Idea:</strong> A protocol assigning "each runtime agent its own cryptographic identity with scoped capabilities and an independent lifecycle." Moves beyond OAuth's "one identity per application" by enabling per-agent, user-isolated credentials.</p>
+        <p><strong>Relevance:</strong> Proves the identity primitive is real and urgent. The Agent Auth Protocol's per-agent cryptographic identity maps directly to <code>runtime.identity.current()</code> — but without a userland runtime, each app must implement the protocol itself. The runtime would provide it as a configured provider.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+        <span class="tag amber">Microsoft Agent Framework · Apr 2026</span>
+        <h3>Kernel-Decoupled Tools</h3>
+        <p><strong>Idea:</strong> Microsoft's Agent Framework 1.0 (successor to Semantic Kernel) explicitly decouples tools from the kernel. The <code>[KernelFunction]</code> methods are "highly portable assets across Microsoft's AI stack" — tools don't need to flow through a kernel at all.</p>
+        <p><strong>Relevance:</strong> Direct evidence that even the "kernel-shaped" thinking in the industry is moving toward userland tools. Microsoft found that tools as kernel primitives was over-engineering. Tools as portable userland assets — decoupled from any kernel — is the direction they chose.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+        <span class="tag blue">Dagger Functions · 2025–2026</span>
+        <h3>Containerized SDK with Provider Swapping</h3>
+        <p><strong>Idea:</strong> Dagger provides a Sandbox runtime for AI coding agents: Dagger Functions run in containerized, isolated environments. LLMs can call Dagger Functions "as programmable primitives" integrated into any OCI-compatible environment. Functions are defined once, run anywhere.</p>
+        <p><strong>Relevance:</strong> Confirms the "run anywhere" provider model. Dagger's containerized SDK provides a package-manager-style runtime for tool execution — exactly the pattern where a runtime binds to different providers per environment.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+        <span class="tag amber">Nix Ecosystem</span>
+        <h3>Declarative, Reproducible Environments</h3>
+        <p><strong>Idea:</strong> Nix provides a purely functional package manager and declarative language for "Development Environments as Code" (DEaC). A <code>shell.nix</code> or <code>flake.nix</code> describes the full environment: tools, libraries, services, configs.</p>
+        <p><strong>Relevance:</strong> The original "environment as code" pattern. Nix captures <em>system-level</em> environment (compilers, libraries, services). The Portable Userland captures <em>application-level</em> environment (identity, tokens, IPC, secrets). They're complementary: Nix is the provider for the <code>pkg</code> primitive on systems where it's available.</p>
+    </div>
+
+    <h3>Research papers</h3>
+    <div class="table-wrap">
+    <table>
+        <thead>
+            <tr><th>Paper / Talk</th><th>Year</th><th>Key idea</th><th>Relevance to userland runtime</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>PARAVIRT: Userland Containers for Mobile</strong></td>
+                <td>Nov 2025</td>
+                <td>Userland containerization on Linux/Android via modified kernel + paravirtualized syscall interface for I/O</td>
+                <td>Proves userland-level abstraction for container-like isolation without kernel patches — same instinct as runtime providers</td>
+            </tr>
+            <tr>
+                <td><strong>Remote Direct Code Execution (RDX)</strong></td>
+                <td>Nov 2025</td>
+                <td>"CodeFlow abstraction" to inject runtime extensions (WASM, BPF, UDF) across RDMA networks; simplifies remote context gaps</td>
+                <td>The CodeFlow abstraction is a portable IPC primitive — runtime.ipc could use RDX as a provider for high-performance agent-to-agent fabric</td>
+            </tr>
+            <tr>
+                <td><strong>Object-as-a-Service (OaaS) / Oparaca</strong></td>
+                <td>Dec 2025</td>
+                <td>Unified resource, state, and workflow management into a single object-oriented abstraction for edge-cloud-native apps</td>
+                <td>The OaaS abstraction captures environment (SLA, location, connectivity) behind a uniform interface — same pattern as runtime.storage + runtime.ipc</td>
+            </tr>
+            <tr>
+                <td><strong>AgenticOS @ SOSP 2026</strong></td>
+                <td>Jun 2026</td>
+                <td>Academic agenda for OS abstractions tailored for agents: dynamic sandboxing, eBPF observability, agent IPC</td>
+                <td>The academic community recognizing the gap. AgenticOS's IPC and sandboxing proposals map to runtime.ipc and runtime.pkg providers</td>
+            </tr>
+            <tr>
+                <td><strong>Memory Worth (MW) Primitive</strong><br><em>arXiv 2604.12007</em></td>
+                <td>Apr 2026</td>
+                <td>Two-counter per-memory signal: success correlation vs decay. Active forgetting as a first-class primitive.</td>
+                <td>Could be a runtime.observe callback — the runtime watches memory access patterns and applies the MW signal. A userland implementation of the MW paper's idea without needing a kernel change.</td>
+            </tr>
+            <tr>
+                <td><strong>OpenHands Software Agent SDK</strong><br><em>arXiv 2511.03690</em></td>
+                <td>Rev. Apr 2026</td>
+                <td>Composable agent SDK with workspace abstraction for local ↔ containerized code changes. REST/WebSocket IPC.</td>
+                <td>The most complete published SDK implementation of the userland runtime pattern. Validates that workspace (storage + pkg) + IPC + observability belong in a single portable SDK.</td>
+            </tr>
+            <tr>
+                <td><strong>Agent Continuity Engine</strong><br><em>wonderingmax, 2026</em></td>
+                <td>2026</td>
+                <td>Behavioral Distillation Layer to observe, package, and rehydrate agent behavior across different model environments</td>
+                <td>Tackles the <em>behavioral</em> portability problem — complement to the runtime's <em>environmental</em> portability. Together they make a fully portable agent.</td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+
+    <h3>The pattern across all prior art</h3>
+    <p>The industry and academia are converging on the same conclusion from different angles:</p>
+    <ul>
+        <li><strong>WASI</strong> says: abstract the OS behind a portable interface</li>
+        <li><strong>OpenAI Manifest</strong> says: abstract the sandbox behind a manifest</li>
+        <li><strong>OpenHands SDK</strong> says: abstract the workspace behind an SDK</li>
+        <li><strong>Agent Auth Protocol</strong> says: abstract identity behind a cryptographic protocol</li>
+        <li><strong>Microsoft Framework 1.0</strong> says: decouple tools from kernel</li>
+        <li><strong>Nix</strong> says: declare environments in code</li>
+        <li><strong>OaaS / Oparaca</strong> says: abstract edge-cloud environment behind objects</li>
+    </ul>
+
+    <div class="callout blue">
+        <span class="label">What's missing</span>
+        Each of these captures <strong>one</strong> primitive. WASI doesn't know about app identity. OpenAI Manifest doesn't know about token budgets. Agent Auth Protocol doesn't know about packages. <strong>The Portable Userland unifies all seven primitives behind a single runtime interface with a single config file.</strong> The industry is building all the pieces; the missing layer is the runtime that <em>composes</em> them — and the right first step is to <strong>consume the pieces that already exist individually</strong> (OpenAI's SDK libraries for some primitives, WASI for cross-platform hosting, Vault for secrets, etc.) rather than reimplement them.
+    </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- ============================== -->
+<!-- 8. THE PORTABILITY GUARANTEE   -->
+<!-- ============================== -->
+<section class="section" id="portability">
+    <h2><span class="num">08</span>The Portability Guarantee</h2>
+    <p class="sub">How the userland runtime makes the "same app, different machine" claim concrete.</p>
+
+    <h3>The problem it solves</h3>
+    <p>Today, taking an OpenClaw workflow from Jason's laptop to a shared cloud requires:</p>
+    <ul>
+        <li>Replacing <code>$GITHUB_TOKEN</code> env var loading → OIDC token exchange</li>
+        <li>Replacing SQLite file paths → Postgres connection strings</li>
+        <li>Replacing macOS keychain → Vault secrets</li>
+        <li>Replacing <code>pip install</code> → pre-baked container image</li>
+        <li>Replacing <code>/tmp/runtime-ipc/</code> → NATS cluster address</li>
+        <li>Replacing JSON budget file → DynamoDB budget table</li>
+        <li>Replacing <code>console.log</code> → OTel collector endpoint</li>
+    </ul>
+    <p>That's <strong>7 changes</strong> to the app code, assuming the app designer was disciplined enough to extract each concern. Usually it's more — many of these are hard-coded in different places. The port is a partial rewrite.</p>
+
+    <h3>With the userland runtime</h3>
+    <p>The same migration is one file change:</p>
+    <pre><code># Local machine:
+$ cp runtime.local.json runtime.json
+$ julia run-agent.mjs
+# App connects through local providers. Works in 50ms.</code></pre>
+    <pre><code># Cloud deploy:
+$ cp runtime.cloud.json runtime.json
+$ julia run-agent.mjs
+# Same app. Same binary. Different providers. Works identically.</code></pre>
+
+    <p><strong>The portability guarantee:</strong> as long as the provider implementations are semantically compatible (they all implement the same interface), the application code never changes. The <code>runtime.json</code> file is the <strong>only</strong> deployment-specific artifact.</p>
+
+    <h3>What this enables</h3>
+    <div class="grid grid-2">
+        <div class="card">
+            <span class="label">01</span>
+            <h3>Write once, run anywhere</h3>
+            <p>A developer builds and tests an agent on their laptop with local providers. The same agent deploys to a team-shared OpenClaw, to a cloud CI/CD pipeline, and to a client's private instance. One codebase, three runtimes.</p>
+        </div>
+        <div class="card">
+            <span class="label">02</span>
+            <h3>Test locally, audit in cloud</h3>
+            <p>Local identity is unauthenticated (dev mode). Cloud identity is OIDC + ABAC. Local storage is SQLite. Cloud storage is Postgres with immutable audit log. The app logic is identical; the guarantees differ by environment.</p>
+        </div>
+        <div class="card">
+            <span class="label">03</span>
+            <h3>Third-party package as environment</h3>
+            <p>Someone writes a Python app, bundles it with a <code>runtime.json</code> and a <code>runtime.local.json</code>. You install it with <code>pip install &lt;their-app&gt;</code> and copy their <code>runtime.local.json</code> as your <code>runtime.json</code>. The app works on your machine. To deploy to your cluster, the deploy tool generates your <code>runtime.cloud.json</code>. Same app, your environment.</p>
+        </div>
+        <div class="card">
+            <span class="label">04</span>
+            <h3>Provider swap = capability upgrade</h3>
+            <p>An app built on the runtime automatically gets new capabilities when a provider is swapped: switch <code>secrets</code> from <code>.env</code> to <code>Vault</code> and suddenly every secrets access is audited. No code change. The provider upgrade is invisible to the app.</p>
+        </div>
+    </div>
+
+    <div class="callout">
+        <span class="label">The ultimate test</span>
+        A coworker should be able to take your runtime-based agent app, run <code>cp runtime.local.json runtime.json && julia run-agent.mjs</code> on their machine, and have it work — even if they use macOS, the agent connects to different services, and their secrets live in a different keychain entry. The app works because the runtime abstracts the environment, and the <code>runtime.json</code> configures the right local providers.
+    </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- ============================== -->
+<!-- 9. HONEST CRITIQUE             -->
+<!-- ============================== -->
+<section class="section" id="critique">
+    <h2><span class="num">09</span>Honest Critique</h2>
+    <p class="sub">What this thesis gets wrong, where the hard parts are, and why you might still want kernel primitives.</p>
+
+    <div class="grid grid-2">
+        <div class="card">
+            <span class="tag teal">Userland runtime</span>
+            <h3>Strengths</h3>
+            <p>
+                <strong>Immediately consumable.</strong> <code>npm install</code> is O(seconds). Kernel patches are O(years). <strong>Platform-agnostic.</strong> Works on Linux, macOS, Windows, mobile, cloud — any runtime that supports Node.js / Python. <strong>Provider-swappable.</strong> The config-driven provider model is the only way to make portability real. <strong>Evolvable.</strong> Add a primitive, add providers, bump the minor version. No kernel compatibility concerns. <strong>Composable with kernel primitives.</strong> When the kernel gets real <code>agent_fork(2)</code>, the runtime's <code>pkg</code> provider just installs into the CoW namespace. The runtime enables portability; kernel primitives enable enforcement.
+            </p>
+        </div>
+        <div class="card">
+            <span class="tag red">Userland runtime</span>
+            <h3>Weaknesses</h3>
+            <p>
+                <strong>No hard enforcement.</strong> A userland runtime can't enforce token budgets the way a kernel cgroup can. A rogue app can bypass the runtime by calling the provider directly. <strong>Startup overhead.</strong> Resolving providers in <code>runtime.json</code> takes milliseconds, not nanoseconds. For short-lived agents (<1s), this matters. <strong>Semantic mismatch risk.</strong> Two providers for the same primitive may have subtly different semantics (e.g., "query" is SQL-aware in Postgres but key-only in SQLite). The runtime can only abstract so much. <strong>Versioning surface.</strong> Seven primitives, each with 2-5 providers, all versioned independently — the compatibility matrix grows fast. <strong>It's another dependency.</strong> Adding a runtime to every agent project is friction a kernel primitive doesn't have.
+            </p>
+        </div>
+    </div>
+
+    <h3>If kernel primitives existed, this runtime is still necessary</h3>
+    <p>Even if Linux tomorrow ships all 8 Missing Kernel syscalls, you still need a userland runtime. The kernel provides <code>agent_fork(2)</code> (process isolation), <code>cgroup_agent</code> (resource enforcement). It doesn't provide <code>runtime.identity.for("github.com")</code> or <code>runtime.secrets.get("openai-key")</code>. These are inherently application-level concerns. Kernel primitives and userland runtime are <strong>complementary</strong>, not competing.</p>
+
+    <p>The real question is: <strong>which layer should you ship first?</strong> The Missing Kernel says ship kernel primitives. The Portable Userland says ship the userland runtime — because it's immediately usable by any app developer today, and it makes the kernel debate matter less. When the kernel catches up, the runtime can use it as a provider.</p>
+
+    <div class="callout amber">
+        <span class="label">The honest tradeoff</span>
+        Shipping the userland runtime first means starting with <strong>convention over enforcement</strong>. An app that bypasses the runtime can't be stopped. But an app that follows the pattern is instantly portable. <strong>Convention reaches more users than enforcement.</strong> The Missing Kernel's question is "how do we enforce isolation?" The Portable Userland's question is "how do we make apps portable?" Both matter. The right first step depends on which problem your users are actually hitting today. In 2026, the answer is portability.
+    </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- ============================== -->
+<!-- 10. THE BET                    -->
+<!-- ============================== -->
+<section class="section" id="bet">
+    <h2><span class="num">10</span>The Bet</h2>
+    <p class="sub">If I had to put one bet on the 2026-2028 agent stack, this is it.</p>
+
+    <p>By 2027, every serious agent runtime will have a "runtime interface" — a way to inject environment-specific providers without changing application code. The shape of that interface will look like the 7 primitives: identity, tokens, IPC, packages, storage, secrets, observability. WASI will have inspired a higher-level application runtime standard. OpenAI's Manifest will have grown beyond sandbox portability to full environment portability. OpenHands' workspace abstraction will be the default for cloud agents.</p>
+
+    <p>The Missing Kernel's 8 primitives will eventually be real syscalls on Linux and Windows. But they will ship <strong>after</strong> the userland runtime — because the runtime is faster to build, easier to adopt, and solves the immediate problem (portability) that enterprises and solo devs alike are hitting today.</p>
+
+    <p>The team that builds the userland runtime — a single <code>npm install</code> package with 7 clean primitives, a provider registry, and a <code>runtime.json</code> config format — will have the dominant abstraction for portable agent applications by 2027. The kernel debate will be a footnote. The runtime will be the reality.</p>
+
+    <div class="callout">
+        <span class="label">A working hypothesis</span>
+        Build the userland runtime as a <strong>Python package</strong> (<code>pyxen</code>) on PyPI. Organize it per-primitive, not per-vendor: <code>impl/storage/</code>, <code>impl/identity/</code>, <code>impl/ipc/</code>, <code>impl/pkg/</code>, <code>impl/secrets/</code>, <code>impl/observability/</code>, <code>impl/tokens/</code>. Each impl sub-package hosts multiple implementations; any implementation can <em>reach into</em> OpenAI SDK pieces (or Nix, Vault, NATS, whatever) as needed. <strong>No top-level <code>impl/openai</code></strong> — the OpenAI SDK is a source of pieces, not a wrapped backend. Ship agent-less demos: a minimal CLI, a small FastAPI app, a data-pipeline script. <strong>Ship the interface, the local impls, and the per-primitive OpenAI piece integrations. Nothing more.</strong>
+    </div>
+
+    <h3>The two bets side by side</h3>
+    <div class="grid grid-2">
+        <div class="card">
+            <span class="label">The Missing Kernel Bet</span>
+            <p><em>"Port <strong>BranchFS to a Linux kernel module</strong> with proper <code>agent_fork(2)</code> semantics. That's the single primitive the stack needs most."</em></p>
+        </div>
+        <div class="card">
+            <span class="label teal">The Portable Userland Bet</span>
+            <p><em>"Ship the runtime as a Python package on PyPI. The 7 primitives are what apps actually need to be portable. When the kernel gets <code>agent_fork(2)</code>, the runtime's <code>pkg</code> implementation uses it. But until then, the runtime works without it."</em></p>
+        </div>
+    </div>
+
+    <p style="margin-top:30px;color:rgba(255,255,255,.4);font-size:.85rem"><em>This deck is a response to "The Missing Kernel — Agent OS Primitives in 2026." It is intentionally a complement, not a rebuttal. The Missing Kernel is right about what needs to exist. It is wrong about where those things should live. The userland runtime is the layer that makes agent apps portable today. The kernel primitives are the layer that enforces guarantees tomorrow. Build both. Ship the runtime first.</em></p>
+
+    <p style="margin-top:14px;color:rgba(255,255,255,.4);font-size:.85rem"><em>v0.2 revision (June 14, 2026): clarified that the runtime is <strong>general-purpose</strong> (apps with or without agents), that it is implemented in <strong>Python</strong>, and that <strong>OpenAI's SDK libraries are consumed per-primitive rather than wrapped as a single provider</strong>. MVP demos are agent-less Python apps (CLI / web / pipeline). The agent connection is a future benefit, not a v0 requirement.</em></p>
+
+    <p style="margin-top:8px;color:rgba(255,255,255,.4);font-size:.85rem"><em>v0.3 revision (June 14, 2026): package structure is <strong>per-primitive</strong> (<code>impl/storage/</code>, <code>impl/identity/</code>, &hellip;) — not a top-level <code>impl/openai</code> vs <code>impl/local</code> split. Each primitive's impls can reach into OpenAI SDK pieces (or any other source) as needed. Working name: <code>pyxen</code>. Repo: private, personal org, GitHub Actions CI.</em></p>
+</section>
+
+<footer class="footer">
+    <strong>The Portable Userland — A Userland Runtime for Portable Agents</strong>
+    <span>Direct response to "The Missing Kernel — Agent OS Primitives in 2026" · Counter-thesis: portability lives in userland, not in syscalls</span>
+    <span>Generated for Jason Cui · Research note · June 2026 industry state</span>
+    <span>Hosted on cutuy-claw · <a href="/">All decks</a> · <a href="http://localhost:7890/userland-runtime">Direct link</a> · <a href="/agent-frameworks">Read the companion: The Missing Kernel</a></span>
+</footer>
+
+<script>
+document.querySelectorAll('.nav a').forEach(a => {
+    a.addEventListener('click', e => {
+        const id = a.getAttribute('href');
+        if (id && id.startsWith('#')) {
+            e.preventDefault();
+            const el = document.querySelector(id);
+            if (el) window.scrollTo({ top: el.offsetTop - 60, behavior: 'smooth' });
+        }
+    });
+});
+const sections = document.querySelectorAll('.section');
+
+window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+        if (pageYOffset >= s.offsetTop - 120) current = s.getAttribute('id');
+    });
+    document.querySelectorAll('.nav a').forEach(a => {
+        a.classList.remove('active');
+        if (a.getAttribute('href') === `#${current}`) a.classList.add('active');
+    });
+}, { passive: true });
+</script>
+
+</body>
+</html>

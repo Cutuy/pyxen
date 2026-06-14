@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "identity": {
+    "implementation": "env",
+    "config": {}
+  },
+  "tokens": {
+    "implementation": "json_budget",
+    "config": { "path": "./budget.json", "daily_limit": 1000000 }
+  },
+  "ipc": {
+    "implementation": "inproc",
+    "config": {}
+  },
+  "pkg": {
+    "implementation": "dry_run",
+    "config": {}
+  },
+  "storage": {
+    "implementation": "local_sqlite",
+    "config": { "path": "./notes.db" }
+  },
+  "secrets": {
+    "implementation": "dotenv",
+    "config": { "path": "./.env" }
+  },
+  "observability": {
+    "implementation": "stdout",
+    "config": { "level": "info" }
+  }
+}
