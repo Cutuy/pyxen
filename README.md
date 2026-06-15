@@ -69,8 +69,9 @@ pyxen test        # run test suite
 
 ## Roadmap
 
+- Agent skill or plugin that builds or translates apps into pyxen runtime rather than using their natives
+- Stateful runtime and daemon
 - Add integration tests for all primitive/implementation combinations
-- Write documentation for each primitive and implementation
 
 ## Design
 
