@@ -26,6 +26,9 @@ else
     echo "  README updated and amended into commit"
 fi
 
+echo "→ secrets check (LLM)..."
+"$PYTHON" scripts/check-secrets.py
+
 echo "→ mypy (type checking)..."
 "$PYTHON" -m mypy src examples
 echo "→ pyxen test..."
