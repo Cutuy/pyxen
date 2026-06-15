@@ -71,9 +71,11 @@ pyxen test        # run test suite
 
 ## Roadmap
 
-- Expose more openai-agents SDK libs as pyxen backends (identity, handoffs, manifest → storage)
+- `pyxen describe <primitive> <impl>` — print config schema per impl (each impl exports `config_schema` dict)
+- `pyxen validate` — validate `runtime.json` against per-impl schemas
+- Redis storage backend
+- Local file secrets backend
 - Port existing OpenClaw apps onto pyxen primitives
-- Cloud storage impls (S3, Postgres)
 
 ## Design
 

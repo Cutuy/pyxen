@@ -40,6 +40,7 @@ MODULES: tuple[str, ...] = (
     # impl: storage
     "pyxen.impl.storage.inmemory",
     "pyxen.impl.storage.local_sqlite",
+    "pyxen.impl.storage.redis",
     "pyxen.impl.storage.local_fs_mount",
     # impl: tokens
     "pyxen.impl.tokens.json_budget",
@@ -50,6 +51,7 @@ MODULES: tuple[str, ...] = (
     "pyxen.impl.pkg.dry_run",
     # impl: secrets
     "pyxen.impl.secrets.dotenv",
+    "pyxen.impl.secrets.local_file",
     # impl: observability
     "pyxen.impl.observability.stdout",
     "pyxen.impl.observability.null",
