@@ -111,10 +111,16 @@ def build_table(
         label = info["label"]
         question = info["question"]
         impl_list = impls.get(prim, [])
-        impl_col = ", ".join(
-            f"`{i['name']}`" + (f" — {i['doc']}" if i['doc'] else "")
-            for i in impl_list
-        ) if impl_list else "—"
+        if impl_list:
+            items = []
+            for i in impl_list:
+                entry = f"`{i['name']}`"
+                if i['doc']:
+                    entry += f" — {i['doc']}"
+                items.append(f"- {entry}")
+            impl_col = "<br>" + "<br>".join(items)
+        else:
+            impl_col = "—"
         lines.append(f"| `{label}` | {question} | {impl_col} |")
     return "\n".join(lines)
 

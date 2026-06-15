@@ -6,13 +6,13 @@ A userland runtime interface that makes AI agent-built apps portable — run the
 
 | Primitive | What it answers | Implementations |
 |---|---|---|
-| `identity` | Identity primitive — who's calling, and on whose behalf. | `env` — ``env`` identity impl — reads identity from environment variables., `keychain` — ``keychain`` identity impl — reads identity from macOS Keychain. |
-| `ipc` | IPC primitive — inter-process or inter-agent messaging. | `inproc` — ``inproc`` ipc impl — async in-process message bus. |
-| `observability` | Observability primitive — structured, routable telemetry. | `file` — ``file`` observability impl — structured JSON to a local log file., `null` — ``null`` observability impl — drop everything., `openai_tracing` — ``openai_tracing`` observability impl — wraps the OpenAI Agents SDK tracing., `stdout` — ``stdout`` observability impl — structured JSON to stdout. |
-| `pkg` | Pkg primitive — environment / dependency declaration and satisfaction. | `dry_run` — ``dry_run`` pkg impl — no-op for environments where dependencies are |
-| `secrets` | Secrets primitive — named, audited access to credentials. | `dotenv` — ``dotenv`` secrets impl — reads from a ``.env`` file., `local_file` — ``local_file`` secrets backend — secrets from a local JSON file. |
-| `storage` | Storage primitive — key-value or document store interface. | `inmemory` — ``inmemory`` storage impl — dict-backed, for tests and fast iteration., `local_fs_mount` — ``local_fs_mount`` storage impl — mounts a directory tree as the storage namespace., `local_sqlite` — ``local_sqlite`` storage impl — single-file SQLite backend., `redis` — ``redis`` storage backend — key-value backed by Redis. |
-| `tokens` | Tokens primitive — model/token budget check and charge. | `json_budget` — ``json_budget`` tokens impl — soft budget with JSON file backing., `openai_usage` — ``openai_usage`` tokens backend — structured token accounting using the OpenAI SDK. |
+| `identity` | Identity primitive — who's calling, and on whose behalf. | <br>- `env` — ``env`` identity impl — reads identity from environment variables.<br>- `keychain` — ``keychain`` identity impl — reads identity from macOS Keychain. |
+| `ipc` | IPC primitive — inter-process or inter-agent messaging. | <br>- `inproc` — ``inproc`` ipc impl — async in-process message bus. |
+| `observability` | Observability primitive — structured, routable telemetry. | <br>- `file` — ``file`` observability impl — structured JSON to a local log file.<br>- `null` — ``null`` observability impl — drop everything.<br>- `openai_tracing` — ``openai_tracing`` observability impl — wraps the OpenAI Agents SDK tracing.<br>- `stdout` — ``stdout`` observability impl — structured JSON to stdout. |
+| `pkg` | Pkg primitive — environment / dependency declaration and satisfaction. | <br>- `dry_run` — ``dry_run`` pkg impl — no-op for environments where dependencies are |
+| `secrets` | Secrets primitive — named, audited access to credentials. | <br>- `dotenv` — ``dotenv`` secrets impl — reads from a ``.env`` file.<br>- `local_file` — ``local_file`` secrets backend — secrets from a local JSON file. |
+| `storage` | Storage primitive — key-value or document store interface. | <br>- `inmemory` — ``inmemory`` storage impl — dict-backed, for tests and fast iteration.<br>- `local_fs_mount` — ``local_fs_mount`` storage impl — mounts a directory tree as the storage namespace.<br>- `local_sqlite` — ``local_sqlite`` storage impl — single-file SQLite backend.<br>- `redis` — ``redis`` storage backend — key-value backed by Redis. |
+| `tokens` | Tokens primitive — model/token budget check and charge. | <br>- `json_budget` — ``json_budget`` tokens impl — soft budget with JSON file backing.<br>- `openai_usage` — ``openai_usage`` tokens backend — structured token accounting using the OpenAI SDK. |
 
 ## How it compares
 
@@ -69,24 +69,6 @@ pyxen test        # run test suite
 
 ## Roadmap
 
-- [done] `pyxen describe <primitive> <impl>` — print config schema per impl (each impl exports `config_schema` dict)
-- [done] `pyxen validate` — validate `runtime.json` against per-impl schemas
-- [done] Redis storage backend
-- [done] Local file secrets backend
-- [done] Inmemory storage backend
-- [done] Local SQLite storage backend
-- [done] Local filesystem mount storage backend
-- [done] Dotenv secrets backend
-- [done] Env identity backend
-- [done] Keychain identity backend
-- [done] Inproc IPC backend
-- [done] File observability backend
-- [done] Null observability backend
-- [done] OpenAI tracing observability backend
-- [done] Stdout observability backend
-- [done] Dry run pkg backend
-- [done] JSON budget tokens backend
-- [done] OpenAI usage tokens backend
 - Port existing OpenClaw apps onto pyxen primitives
 - Implement `pyxen run` command to execute runtime.json
 - Add integration tests for all primitive/implementation combinations
