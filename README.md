@@ -4,17 +4,15 @@ A userland runtime interface that makes AI agent-built apps portable — run the
 
 ## What
 
-7 abstract primitives. Load a `runtime.json` that maps each to a concrete backend. The app only sees `rt.storage`, `rt.observability`, etc. — same code on your laptop, in OpenClaw, in a sandbox; only `runtime.json` changes.
-
-| Primitive | Answers |
-|---|---|
-| `identity` | Who's calling? |
-| `tokens` | Within LLM budget? |
-| `ipc` | Message another process |
-| `pkg` | Dependencies present? |
-| `storage` | Persist a record |
-| `secrets` | Get a credential |
-| `observability` | Emit a trace / log |
+| Primitive | What it answers | Implementations |
+|---|---|---|
+| `identity` | Who's calling? | `env` — ``env`` identity impl — reads identity from environment variables., `keychain` — ``keychain`` identity impl — reads identity from macOS Keychain. |
+| `tokens` | Within LLM budget? | `json_budget` — ``json_budget`` tokens impl — soft budget with JSON file backing., `openai_usage` — ``openai_usage`` tokens backend — structured token accounting using the OpenAI SDK. |
+| `ipc` | Message another process | `inproc` — ``inproc`` ipc impl — async in-process message bus. |
+| `pkg` | Dependencies present? | `dry_run` — ``dry_run`` pkg impl — no-op for environments where dependencies are |
+| `storage` | Persist a record | `inmemory` — ``inmemory`` storage impl — dict-backed, for tests and fast iteration., `local_fs_mount` — ``local_fs_mount`` storage impl — mounts a directory tree as the storage namespace., `local_sqlite` — ``local_sqlite`` storage impl — single-file SQLite backend., `redis` — ``redis`` storage backend — key-value backed by Redis. |
+| `secrets` | Get a credential | `dotenv` — ``dotenv`` secrets impl — reads from a ``.env`` file., `local_file` — ``local_file`` secrets backend — secrets from a local JSON file. |
+| `observability` | Emit a trace / log | `file` — ``file`` observability impl — structured JSON to a local log file., `null` — ``null`` observability impl — drop everything., `openai_tracing` — ``openai_tracing`` observability impl — wraps the OpenAI Agents SDK tracing., `stdout` — ``stdout`` observability impl — structured JSON to stdout. |
 
 ## How it compares
 

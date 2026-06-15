@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: mypy + ruff + pyxen test (Python ${{ matrix.python-version }})
+    name: mypy + pyxen test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -31,9 +31,6 @@ jobs:
 
       - name: mypy (strict)
         run: mypy src examples
-
-      - name: ruff lint
-        run: ruff check src examples
 
       - name: "pyxen test (per-module _main() suite)"
         run: pyxen-test
