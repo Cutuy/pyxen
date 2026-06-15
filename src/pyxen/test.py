@@ -43,6 +43,7 @@ MODULES: tuple[str, ...] = (
     "pyxen.impl.storage.local_fs_mount",
     # impl: tokens
     "pyxen.impl.tokens.json_budget",
+    "pyxen.impl.tokens.openai_usage",
     # impl: ipc
     "pyxen.impl.ipc.inproc",
     # impl: pkg
