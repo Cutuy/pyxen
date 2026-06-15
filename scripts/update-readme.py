@@ -46,23 +46,25 @@ def _resolve_api_key() -> str | None:
 
 # ── 1. Discover primitives from core/ Protocols ─────────────────────
 
+PRIMITIVE_QUESTIONS: dict[str, str] = {
+    "identity": "Who's calling?",
+    "tokens": "Within LLM budget?",
+    "ipc": "Message another process",
+    "pkg": "Dependencies present?",
+    "storage": "Persist a record",
+    "secrets": "Get a credential",
+    "observability": "Emit a trace / log",
+}
+
+
 def discover_primitives() -> dict[str, dict[str, str]]:
     """Scan core/ for Protocol classes and return {name: {label, question}}."""
     result: dict[str, dict[str, str]] = {}
     for pyfile in sorted(CORE_DIR.glob("*.py")):
         if pyfile.name in ("__init__.py", "manifest.py", "errors.py", "runtime.py"):
             continue
-        name = pyfile.stem  # e.g. "identity", "storage"
-        # Use the file-level docstring first line as the description
-        question = ""
-        try:
-            tree = ast.parse(pyfile.read_text(encoding="utf-8"))
-            doc = ast.get_docstring(tree)
-            if doc:
-                question = doc.split("\n")[0].strip()
-        except Exception:
-            pass
-        result[name] = {"label": name, "question": question}
+        name = pyfile.stem
+        result[name] = {"label": name, "question": PRIMITIVE_QUESTIONS.get(name, "")}
     return result
 
 
