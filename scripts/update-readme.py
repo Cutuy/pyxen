@@ -156,7 +156,9 @@ def llm_roadmap_updates(
                     "content": (
                         "You are a technical maintainer. Given the current README, the list "
                         "of primitives, and available implementations, suggest an updated "
-                        "Roadmap section. Mark completed items as done. "
+                        "Roadmap section. "
+                        "Drop any line that describes something already implemented. "
+                        "Keep only future TODOs and high-level roadmap items. "
                         "Keep it concise — bullet list format. "
                         "Output ONLY the new Roadmap section content, nothing else. "
                         "Each line should start with `- `."
