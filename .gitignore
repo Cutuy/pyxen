@@ -58,3 +58,8 @@ budget.json
 .env
 .env.local
 *.log
+
+# OpenCode CLI
+opencode.json
+.opencode-data/
+.opencode/node_modules/

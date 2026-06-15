@@ -1,0 +1,47 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "deepseek": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "DeepSeek V4",
+      "options": {
+        "baseURL": "https://api.deepseek.com/v1",
+        "apiKey": "{env:DEEPSEEK_API_KEY}"
+      },
+      "models": {
+        "deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro"
+        },
+        "deepseek-v4-flash": {
+          "name": "DeepSeek V4 Flash"
+        },
+        "deepseek-chat": {
+          "name": "DeepSeek Chat (legacy)"
+        }
+      }
+    }
+  },
+  "agent": {
+    "default": {
+      "model": "deepseek/deepseek-v4-pro",
+      "temperature": 0.7
+    },
+    "coder": {
+      "model": "deepseek/deepseek-v4-pro",
+      "temperature": 0.5
+    }
+  },
+  "plugin": [
+    "@ai-sdk/openai-compatible"
+  ],
+  "permission": {
+    "bash": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "read": "allow",
+    "edit": "allow",
+    "webSearch": "allow",
+    "webFetch": "allow",
+    "task": "allow"
+  }
+}
