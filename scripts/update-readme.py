@@ -87,11 +87,16 @@ def discover_impls() -> dict[str, list[dict[str, str]]]:
 
 
 def _first_doc_line(path: Path) -> str:
+    """Return first docstring line, stripped of the leading ``name`` prefix."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         doc = ast.get_docstring(tree)
         if doc:
-            return doc.split("\n")[0].strip()
+            line = doc.split("\n")[0].strip()
+            # Strip leading ``name`` type — prefix since name is already shown
+            if line.startswith("``"):
+                line = line.split(" — ", 1)[-1] if " — " in line else line.split("``", 2)[-1].lstrip()
+            return line
     except Exception:
         pass
     return ""
