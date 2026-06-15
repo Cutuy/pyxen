@@ -6,15 +6,22 @@
 #   ./opencode.sh run ...  — run prompt (non-interactive)
 #
 # Ensures opencode runs with pyxen's local config and repository context.
-# Model: deepseek/deepseek-v4-pro via @ai-sdk/openai-compatible plugin
-# API key: embedded in project config (from .env DEEPSEEK_API_KEY)
+# Model: deepseek/deepseek-v4-pro via @ai-sdk/openai-compatible plugin.
+# API key: loaded from .env (DEEPSEEK_API_KEY) via {env:...} in config.
 #
 
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Add opencode to PATH if not already there
+# ── Load .env into environment ───────────────────────────────────────
+if [ -f "$DIR/.env" ]; then
+  set -a
+  source "$DIR/.env"
+  set +a
+fi
+
+# ── Ensure opencode is on PATH ───────────────────────────────────────
 if ! command -v opencode &>/dev/null; then
   export PATH="$HOME/.opencode/bin:$PATH"
 fi
