@@ -70,7 +70,6 @@ pyxen test        # run test suite
 ## Roadmap
 
 - Port existing OpenClaw apps onto pyxen primitives
-- Implement `pyxen run` command to execute runtime.json
 - Add integration tests for all primitive/implementation combinations
 - Write documentation for each primitive and implementation
 
@@ -83,3 +82,7 @@ Portability lives in userland, not syscalls. See [`docs/userland-runtime.md`](./
 MIT. See [`LICENSE`](./LICENSE). Attributions in [`NOTICE.md`](./NOTICE.md).
 
 > This project was entirely AI-generated. Every line of code was written by an AI language model (Claude, DeepSeek) under human direction. The README, the docs, the tests, the slides — all of it. Use it, fork it, ship it. Just know the author never touched a keyboard to write a single line.
+
+## Fun fact
+
+The pre-push hook calls DeepSeek via the OpenAI-compatible API to auto-update this README — the roadmap and implementation table regenerate themselves before every push. Yes, this README reads itself, edits itself, and commits itself. It's READMEs all the way down.
