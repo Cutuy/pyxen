@@ -1,0 +1,17 @@
+#!/bin/bash
+# pre-push hook — run the pyxen test suite before allowing any push.
+# If tests fail the push is aborted.
+
+set -e
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+# Resolve Python — prefer the .venv if it exists
+if [ -f ".venv/bin/python" ]; then
+    PYTHON=".venv/bin/python"
+else
+    PYTHON="python3"
+fi
+
+PYTHONPATH="src:$PYTHONPATH" exec "$PYTHON" -m pyxen.test
