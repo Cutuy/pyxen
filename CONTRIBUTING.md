@@ -34,6 +34,17 @@ Tokens primitive returns `allowed: true` + `reason` — app decides. Hard-block 
 
 Agent-specific code doesn't belong in core.
 
+## Pre-push hook
+
+The repo ships a ``.githooks/pre-push`` hook that runs ``mypy`` + ``pyxen test`` before every push.
+Activate it locally (one-time):
+
+```bash
+cd pyxen && git config core.hooksPath .githooks
+```
+
+The hook aborts the push if either step fails.
+
 ## Repo hygiene
 
 - `main` only. Squash-merge. Conventional commits.
