@@ -69,11 +69,28 @@ pyxen test        # run test suite
 
 ## Roadmap
 
-- `pyxen describe <primitive> <impl>` — print config schema per impl (each impl exports `config_schema` dict)
-- `pyxen validate` — validate `runtime.json` against per-impl schemas
-- Redis storage backend
-- Local file secrets backend
+- [done] `pyxen describe <primitive> <impl>` — print config schema per impl (each impl exports `config_schema` dict)
+- [done] `pyxen validate` — validate `runtime.json` against per-impl schemas
+- [done] Redis storage backend
+- [done] Local file secrets backend
+- [done] Inmemory storage backend
+- [done] Local SQLite storage backend
+- [done] Local filesystem mount storage backend
+- [done] Dotenv secrets backend
+- [done] Env identity backend
+- [done] Keychain identity backend
+- [done] Inproc IPC backend
+- [done] File observability backend
+- [done] Null observability backend
+- [done] OpenAI tracing observability backend
+- [done] Stdout observability backend
+- [done] Dry run pkg backend
+- [done] JSON budget tokens backend
+- [done] OpenAI usage tokens backend
 - Port existing OpenClaw apps onto pyxen primitives
+- Implement `pyxen run` command to execute runtime.json
+- Add integration tests for all primitive/implementation combinations
+- Write documentation for each primitive and implementation
 
 ## Design
 
