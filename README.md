@@ -1,6 +1,6 @@
 # pyxen
 
-A userland runtime interface that makes AI agent-built apps portable — run them locally, share with others, or deploy to the cloud without rewriting them.
+A userland runtime interface that makes AI agent-built apps portable — run them locally, share with others, or deploy to the cloud without rewriting them. Portability also means the agentic runtime can be fully stripped away — the app stays.
 
 ## What
 
@@ -71,7 +71,6 @@ pyxen test        # run test suite
 
 - Agent skill or plugin that builds or translates apps into pyxen runtime rather than using their natives
 - Stateful runtime and daemon
-- Add integration tests for all primitive/implementation combinations
 
 ## Design
 
