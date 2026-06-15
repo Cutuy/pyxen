@@ -14,4 +14,9 @@ else
     PYTHON="python3"
 fi
 
-PYTHONPATH="src:$PYTHONPATH" exec "$PYTHON" -m pyxen.test
+PYTHONPATH="src:$PYTHONPATH"
+
+echo "→ mypy (type checking)..."
+"$PYTHON" -m mypy src examples
+echo "→ pyxen test..."
+"$PYTHON" -m pyxen.test

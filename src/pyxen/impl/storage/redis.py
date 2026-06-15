@@ -26,7 +26,7 @@ import json
 from typing import Any
 
 try:
-    import redis.asyncio as aioredis
+    import redis.asyncio as aioredis  # type: ignore[import-not-found]
     _HAS_REDIS = True
 except ImportError:
     _HAS_REDIS = False
@@ -42,7 +42,7 @@ class RedisStorage:
         self._url = str(config.get("url", "redis://localhost:6379/0"))
         self._prefix = str(config.get("prefix", "pyxen:"))
 
-    async def _conn(self):
+    async def _conn(self) -> Any:
         """Lazy connection — created per call to avoid thread issues."""
         return await aioredis.from_url(self._url)
 

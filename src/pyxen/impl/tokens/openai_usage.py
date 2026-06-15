@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 try:
     from agents.usage import Usage
@@ -40,7 +40,7 @@ class OpenAIUsageTokens:
             )
 
         self._path = Path(str(config.get("path", "token-usage.json"))).resolve()
-        self._daily_limit = int(config.get("daily_limit", 1000000))
+        self._daily_limit = cast(int, config.get("daily_limit", 1000000))
         self._usage = self._load()
 
     def _load(self) -> Usage:
@@ -48,7 +48,7 @@ class OpenAIUsageTokens:
             try:
                 data = json.loads(self._path.read_text(encoding="utf-8"))
                 # Use the SDK's deserializer if available, or manual mapping
-                from agents.usage import InputTokensDetails, OutputTokensDetails
+                from agents.usage import InputTokensDetails, OutputTokensDetails  # type: ignore[attr-defined]
                 return Usage(
                     input_tokens=data.get("input_tokens", 0),
                     output_tokens=data.get("output_tokens", 0),
@@ -62,7 +62,7 @@ class OpenAIUsageTokens:
                 )
             except (json.JSONDecodeError, KeyError):
                 pass
-        from agents.usage import InputTokensDetails, OutputTokensDetails
+        from agents.usage import InputTokensDetails, OutputTokensDetails  # type: ignore[attr-defined]
         return Usage(
             input_tokens=0,
             output_tokens=0,
@@ -109,7 +109,7 @@ class OpenAIUsageTokens:
         reasoning_tokens: int = 0,
     ) -> None:
         """Record actual token consumption."""
-        from agents.usage import InputTokensDetails, OutputTokensDetails
+        from agents.usage import InputTokensDetails, OutputTokensDetails  # type: ignore[attr-defined]
         self._usage.add(Usage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
