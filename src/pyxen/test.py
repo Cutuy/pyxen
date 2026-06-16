@@ -42,6 +42,7 @@ MODULES: tuple[str, ...] = (
     "pyxen.impl.storage.local_sqlite",
     "pyxen.impl.storage.redis",
     "pyxen.impl.storage.local_fs_mount",
+    "pyxen.impl.storage.router",
     # impl: tokens
     "pyxen.impl.tokens.json_budget",
     "pyxen.impl.tokens.openai_usage",

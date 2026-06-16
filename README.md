@@ -11,7 +11,7 @@ A userland runtime interface that makes AI agent-built apps portable — run the
 | `observability` | Emit a trace / log | <br>- `file` — structured JSON to a local log file.<br>- `null` — drop everything.<br>- `openai_tracing` — wraps the OpenAI Agents SDK tracing.<br>- `stdout` — structured JSON to stdout. |
 | `pkg` | Dependencies present? | <br>- `dry_run` — no-op for environments where dependencies are |
 | `secrets` | Get a credential | <br>- `dotenv` — reads from a ``.env`` file.<br>- `local_file` — secrets from a local JSON file. |
-| `storage` | Persist a record | <br>- `inmemory` — dict-backed, for tests and fast iteration.<br>- `local_fs_mount` — mounts a directory tree as the storage namespace.<br>- `local_sqlite` — single-file SQLite backend.<br>- `redis` — key-value backed by Redis. |
+| `storage` | Persist a record | <br>- `inmemory` — dict-backed, for tests and fast iteration.<br>- `local_fs_mount` — mounts a directory tree as the storage namespace.<br>- `local_sqlite` — single-file SQLite backend.<br>- `redis` — key-value backed by Redis.<br>- `router` — namespace-routed multi-backend storage. |
 | `tokens` | Within LLM budget? | <br>- `json_budget` — soft budget with JSON file backing.<br>- `openai_usage` — structured token accounting using the OpenAI SDK. |
 
 ## How it compares
