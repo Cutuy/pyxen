@@ -67,6 +67,53 @@ pyxen doctor      # verify impls are importable
 pyxen test        # run test suite
 ```
 
+## Examples
+
+The `examples/` directory has 4 runnable apps. Each one shows the runtime doing a different job.
+
+### [`a2a_chat`](./examples/a2a_chat/README.md)
+
+Runs an A2A-compatible agent that processes tasks sent via JSON-RPC.
+Supports both request/reply (``tasks/sendMessage``) and streaming
+(``tasks/sendStreamingMessage``) interaction patterns.
+
+```bash
+uvicorn examples.a2a_chat.agent:app --reload --port 8080
+```
+
+### [`data_pipeline`](./examples/data_pipeline/README.md)
+
+The point is to demonstrate that the **only thing** that changes between
+"local dev" and "production deploy" is the ``runtime.json`` file. The
+script code is identical.
+
+```bash
+PYTHONPATH=src python examples/data_pipeline/pipeline.py
+```
+
+### [`hello_runtime`](./examples/hello_runtime/README.md)
+
+A 30-line Python program that loads the runtime, exercises 3 primitives,
+and prints a single line. It does the smallest possible thing that proves
+the runtime architecture works end-to-end.
+
+```bash
+python -m examples.hello_runtime.main
+```
+
+### [`notes_app`](./examples/notes_app/README.md)
+
+This is a plain web app: no agents, no LLM calls. The point is to
+demonstrate that the runtime serves a normal Python web app just as well
+as an agent-containing one.
+
+```bash
+pip install pyxen[examples]      # adds fastapi + uvicorn
+pyxen validate runtime.json
+uvicorn examples.notes_app.app:app --reload
+```
+
+
 ## Roadmap
 
 - Agent skill or plugin that builds or translates apps into pyxen runtime rather than using their natives

@@ -23,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 README_PATH = REPO_ROOT / "README.md"
 CORE_DIR = REPO_ROOT / "src" / "pyxen" / "core"
 IMPL_DIR = REPO_ROOT / "src" / "pyxen" / "impl"
+EXAMPLES_DIR = REPO_ROOT / "examples"
 ENV_PATH = REPO_ROOT / ".env"
 
 
@@ -102,6 +103,78 @@ def _first_doc_line(path: Path) -> str:
     except Exception:
         pass
     return ""
+
+
+# ── 2b. Discover examples from examples/ ────────────────────────────
+
+_RUN_BLOCK_RE = re.compile(
+    r"Run with[^\n]*?::?\s*\n((?:[ \t]+.+\n?)+)",
+    re.MULTILINE,
+)
+
+
+def discover_examples() -> list[dict[str, str]]:
+    """Scan ``examples/*/`` and return one entry per example directory.
+
+    Each entry: ``{name, blurb, run_cmd, rel_path}``. The primary file is
+    the alphabetically-first ``.py`` file in the folder (ignoring
+    ``__init__.py``); its module docstring drives the blurb + run command.
+    """
+    result: list[dict[str, str]] = []
+    if not EXAMPLES_DIR.is_dir():
+        return result
+    for ex_dir in sorted(EXAMPLES_DIR.iterdir()):
+        if not ex_dir.is_dir() or ex_dir.name.startswith(("_", ".")):
+            continue
+        py_files = sorted(
+            p for p in ex_dir.glob("*.py") if p.name != "__init__.py"
+        )
+        if not py_files:
+            continue
+        primary = py_files[0]
+        try:
+            doc = ast.get_docstring(ast.parse(primary.read_text(encoding="utf-8"))) or ""
+        except (OSError, SyntaxError):
+            doc = ""
+        result.append({
+            "name": ex_dir.name,
+            "blurb": _blurb_after_title(doc),
+            "run_cmd": _extract_run_block(doc),
+            "rel_path": f"examples/{ex_dir.name}",
+        })
+    return result
+
+
+def _blurb_after_title(doc: str) -> str:
+    """Return the paragraph after the title (``name — short description``).
+
+    If the docstring has only one paragraph (title and blurb fused on the
+    first line), that paragraph is returned as the blurb.
+    """
+    paragraphs = [p.strip() for p in doc.split("\n\n") if p.strip()]
+    if len(paragraphs) >= 2:
+        return paragraphs[1]
+    if paragraphs:
+        return paragraphs[0]
+    return ""
+
+
+def _extract_run_block(doc: str) -> str:
+    """Pull the first code block under ``Run with`` / ``Run with::``.
+
+    Handles both reST (``::``) and markdown (``:``) conventions. The
+    common leading indent is stripped so the block can be dropped into a
+    fenced code block.
+    """
+    m = _RUN_BLOCK_RE.search(doc)
+    if not m:
+        return ""
+    lines = m.group(1).rstrip("\n").split("\n")
+    indents = [len(l) - len(l.lstrip(" \t")) for l in lines if l.strip()]
+    if not indents:
+        return ""
+    min_indent = min(indents)
+    return "\n".join(l[min_indent:] for l in lines).rstrip()
 
 
 # ── 3. Build the markdown table ──────────────────────────────────────
@@ -226,18 +299,46 @@ TABLE_ANCHOR = "<!-- impl-table -->"
 ROADMAP_ANCHOR = "<!-- roadmap -->"
 
 
+def build_examples_section(examples: list[dict[str, str]]) -> str:
+    """Render the Examples section from discovered examples."""
+    if not examples:
+        return "_(no examples yet)_\n"
+    lines: list[str] = [
+        (
+            f"The `examples/` directory has {len(examples)} runnable apps. "
+            "Each one shows the runtime doing a different job.\n"
+        )
+    ]
+    for ex in examples:
+        lines.append(f"### [`{ex['name']}`](./{ex['rel_path']}/README.md)")
+        lines.append("")
+        if ex["blurb"]:
+            lines.append(ex["blurb"])
+            lines.append("")
+        if ex["run_cmd"]:
+            lines.append("```bash")
+            lines.append(ex["run_cmd"])
+            lines.append("```")
+            lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def patch_readme(
     readme: str,
     primitives: dict[str, dict[str, str]],
     impls: dict[str, list[dict[str, str]]],
     new_roadmap: str | None,
+    new_examples: str,
 ) -> str:
-    """Replace the table and roadmap sections."""
+    """Replace the table, examples, and roadmap sections."""
     result = readme
     new_table = build_table(primitives, impls)
 
     # Replace table
     result = _replace_section(result, "## What", new_table)
+
+    # Replace examples
+    result = _replace_section(result, "## Examples", new_examples)
 
     # Replace roadmap
     if new_roadmap:
@@ -268,6 +369,7 @@ def _replace_section(md: str, heading: str, new_content: str) -> str:
 def main() -> int:
     primitives = discover_primitives()
     impls = discover_impls()
+    examples = discover_examples()
 
     if not README_PATH.exists():
         print("README.md not found — skipping")
@@ -282,7 +384,10 @@ def main() -> int:
         key_hint = "yes" if _resolve_api_key() else "no"
         print(f"→ LLM unavailable (api_key={key_hint}, openai package={_has_openai()}) — leaving roadmap as-is")
 
-    patched = patch_readme(current, primitives, impls, new_roadmap)
+    new_examples = build_examples_section(examples)
+    print(f"→ discovered {len(examples)} examples: {', '.join(e['name'] for e in examples) or '(none)'}")
+
+    patched = patch_readme(current, primitives, impls, new_roadmap, new_examples)
 
     if patched != current:
         README_PATH.write_text(patched, encoding="utf-8")
