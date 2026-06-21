@@ -162,11 +162,27 @@ def _main() -> None:
             assert other_items[0]["v"] == 99
             assert len(await s.query("ns")) != len(await s.query("other"))
 
+            # Query with filter that matches nothing
+            empty_filtered = await s.query("ns", QueryFilter(equals={"tag": "nonexistent"}))
+            assert empty_filtered == []
+
+            # Put with very long key and namespace
+            long_ns = "ns_" + ("x" * 200)
+            long_key = "key_" + ("y" * 200)
+            await s.put(long_ns, long_key, {"v": 1})
+            assert await s.get(long_ns, long_key) == {"v": 1}
+
+            # Put with unicode values
+            await s.put("ns", "unicode", {"emoji": "\U0001f600", "chinese": "\u4e2d\u6587"})
+            got_unicode = await s.get("ns", "unicode")
+            assert got_unicode == {"emoji": "\U0001f600", "chinese": "\u4e2d\u6587"}
+
             # Persistence: close and reopen should preserve data
             s._conn.close()
             s2 = build({"path": str(db_path)})
             assert await s2.get("ns", "k") == {"v": 2}
             assert await s2.get("other", "k") == {"v": 99}
+            assert await s2.get("ns", "unicode") == {"emoji": "\U0001f600", "chinese": "\u4e2d\u6587"}
 
     asyncio.run(go())
 

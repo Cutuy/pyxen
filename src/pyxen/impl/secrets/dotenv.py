@@ -88,6 +88,18 @@ def _main() -> None:
             # Strip surrounding single quotes
             assert await s.get("SINGLE") == "single quoted"
 
+            # Empty value
+            env2 = Path(tmp) / "empty.env"
+            env2.write_text("KEY=\n")
+            s_empty = build({"path": str(env2)})
+            assert await s_empty.get("KEY") == ""
+
+            # Value with only spaces
+            env3 = Path(tmp) / "spaces.env"
+            env3.write_text("KEY=   \n")
+            s_spaces = build({"path": str(env3)})
+            assert await s_spaces.get("KEY") == ""
+
             # Missing secret raises SecretsError
             try:
                 await s.get("NOPE")

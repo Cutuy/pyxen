@@ -208,6 +208,26 @@ def _main() -> None:
                 obs4.close()
             assert Path(deep_path).exists()
 
+        # Unicode span name, attributes, and log data
+        with tempfile.TemporaryDirectory() as tmp:
+            unicode_path = str(Path(tmp) / "unicode.jsonl")
+            obs5 = build({"path": unicode_path})
+            try:
+                async with obs5.trace("span-\U0001f600-\u4e2d\u6587") as span:
+                    span.set_attribute("emoji", "\U0001f600")
+                    span.set_attribute("greeting", "\u4f60\u597d")
+                    span.log("info", "\u043f\u0440\u0438\u0432\u0435\u0442", lang="ru")
+            finally:
+                obs5.close()
+            unicode_lines = Path(unicode_path).read_text(encoding="utf-8").splitlines()
+            assert len(unicode_lines) == 3  # span_start, log, span_end
+            unicode_start = json.loads(unicode_lines[0])
+            assert "\u4e2d\u6587" in unicode_start["span"]
+            unicode_end = json.loads(unicode_lines[-1])
+            assert unicode_end["event"] == "span_end"
+            assert "\U0001f600" in unicode_end["attributes"]["emoji"]
+            assert unicode_end["attributes"]["greeting"] == "\u4f60\u597d"
+
     asyncio.run(go())
 
 

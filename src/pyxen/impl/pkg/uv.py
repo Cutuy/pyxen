@@ -158,6 +158,7 @@ def _main() -> None:
     """Test entry point for uv pkg impl. Smoke-tests build + ensure paths.
     Skips if uv is not available on PATH."""
     import asyncio
+    import os
     import tempfile
 
     if shutil.which("uv") is None:
@@ -174,13 +175,19 @@ def _main() -> None:
         names = {p.name.lower() for p in snap.packages}
         assert "pyxen" in names, f"pyxen not in uv pip list: {names}"
 
+        # Snapshot returns PackageInfo with name, version, source
+        for pkg in snap.packages:
+            assert isinstance(pkg.name, str) and pkg.name
+            assert isinstance(pkg.version, str) and pkg.version
+            assert pkg.source == "uv"
+
         # ensure_python with empty list is a no-op
         await impl.ensure_python([])
 
         # ensure_from_manifest on a missing file is a no-op
         await impl.ensure_from_manifest("/nonexistent/requirements.txt")
 
-        # _parse_requirements on a real-ish file
+        # _parse_requirements: comments, blank lines, -r includes, extras, comparisons
         with tempfile.TemporaryDirectory() as tmp:
             f = Path(tmp) / "reqs.txt"
             f.write_text(
@@ -193,6 +200,27 @@ def _main() -> None:
             )
             parsed = UvPkg._parse_requirements(f)
             assert parsed == ["numpy", "pandas", "httpx"], parsed
+
+        # _parse_requirements: plain name, exact version, min version
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "reqs2.txt"
+            f.write_text("requests\nflask==3.0.0\ndjango>=5.0\n")
+            parsed2 = UvPkg._parse_requirements(f)
+            assert parsed2 == ["requests", "flask", "django"], parsed2
+
+        # _parse_requirements: mixed whitespace, inline comment
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "reqs3.txt"
+            f.write_text("  numpy >= 2.0  \n  # inline comment\ntorch\n")
+            parsed3 = UvPkg._parse_requirements(f)
+            assert parsed3 == ["numpy", "torch"], parsed3
+
+        # _parse_requirements: empty file
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "empty.txt"
+            f.write_text("")
+            parsed4 = UvPkg._parse_requirements(f)
+            assert parsed4 == [], parsed4
 
         # verify() checks installed vs requirements
         result = await impl.verify()
@@ -210,6 +238,27 @@ def _main() -> None:
             impl_tmp = build({"requirements": str(req_path)})
             result_tmp = await impl_tmp.verify()
             assert result_tmp.satisfied, f"pyxen should be installed: missing={result_tmp.missing}"
+
+        # verify() that detects a missing package
+        with tempfile.TemporaryDirectory() as tmp:
+            req_path = Path(tmp) / "missing_req.txt"
+            req_path.write_text("completely_nonexistent_package_xyz\n")
+            impl_missing = build({"requirements": str(req_path)})
+            result_missing = await impl_missing.verify()
+            assert result_missing.satisfied is False
+            assert "completely_nonexistent_package_xyz" in result_missing.missing
+
+        # ensure_python and ensure_from_manifest with real install (skip unless env var set)
+        if os.environ.get("PYXEN_UV_INSTALL_TEST"):
+            await impl.ensure_python(["six"])
+            snap2 = await impl.snapshot()
+            names2 = {p.name.lower() for p in snap2.packages}
+            assert "six" in names2, f"six should be installed: {names2}"
+
+            with tempfile.TemporaryDirectory() as tmp:
+                req_path = Path(tmp) / "requirements.txt"
+                req_path.write_text("six\n")
+                await impl.ensure_from_manifest(str(req_path))
 
     asyncio.run(go())
 

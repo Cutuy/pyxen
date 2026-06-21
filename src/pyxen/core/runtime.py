@@ -235,6 +235,55 @@ def _main() -> None:
             else:
                 raise AssertionError("malformed JSON should raise ManifestError")
 
+        # --- Manifest with pkg dry_run and custom config ---
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "runtime.json"
+            f.write_text(json.dumps({
+                "version": "1",
+                "pkg": {"implementation": "dry_run", "config": {"extra": "data"}},
+            }))
+            rt_pkg = await Runtime.load(f)
+            assert rt_pkg.pkg is not None
+            await rt_pkg.pkg.ensure_python(["requests>=2.0"])
+            with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tf:
+                tf.write(b"requests\n")
+                tf_path = tf.name
+            try:
+                await rt_pkg.pkg.ensure_from_manifest(tf_path)
+            finally:
+                Path(tf_path).unlink()
+            # ensure_from_manifest on missing file is a no-op
+            await rt_pkg.pkg.ensure_from_manifest("/nonexistent/pyproject.toml")
+
+        # --- Manifest with pkg pip (requires pip on PATH) ---
+        import shutil as _shutil2
+        if _shutil2.which("pip"):
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps({
+                    "version": "1",
+                    "pkg": {"implementation": "pip", "config": {}},
+                }))
+                rt_pip = await Runtime.load(f)
+                assert rt_pip.pkg is not None
+                snap = await rt_pip.pkg.snapshot()
+                assert isinstance(snap.packages, list)
+                assert snap.timestamp > 0
+                names = {p.name.lower() for p in snap.packages}
+                assert "pyxen" in names
+
+        # --- Runtime __getattr__ for non-existent raises AttributeError ---
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "runtime.json"
+            f.write_text(json.dumps({"version": "1"}))
+            rt_min = await Runtime.load(f)
+            try:
+                _ = rt_min.nonexistent_primitive
+            except AttributeError as e:
+                assert "nonexistent_primitive" in str(e)
+            else:
+                raise AssertionError("should raise AttributeError for non-existent primitive")
+
         # --- Private attribute access raises AttributeError ---
         with tempfile.TemporaryDirectory() as tmp:
             f = Path(tmp) / "runtime.json"

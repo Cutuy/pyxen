@@ -117,6 +117,53 @@ def _main() -> None:
         # publish on empty topic is a no-op
         await ipc.publish("nobody-listening", {"x": 1})  # should not raise
 
+        # publish with empty payload
+        empty_payload: list[Message] = []
+
+        async def empty_consumer() -> None:
+            async for msg in ipc.subscribe("empty-topic"):
+                empty_payload.append(msg)
+                return
+
+        t_empty = asyncio.create_task(empty_consumer())
+        await asyncio.sleep(0.01)
+        await ipc.publish("empty-topic", {})
+        await asyncio.wait_for(t_empty, timeout=2.0)
+        assert len(empty_payload) == 1
+        assert empty_payload[0].payload == {}
+
+        # publish with unicode payload
+        unicode_msgs: list[Message] = []
+
+        async def unicode_consumer() -> None:
+            async for msg in ipc.subscribe("unicode-topic"):
+                unicode_msgs.append(msg)
+                return
+
+        t_uni = asyncio.create_task(unicode_consumer())
+        await asyncio.sleep(0.01)
+        await ipc.publish("unicode-topic", {"emoji": "\U0001f600", "greeting": "\u4f60\u597d"})
+        await asyncio.wait_for(t_uni, timeout=2.0)
+        assert len(unicode_msgs) == 1
+        assert unicode_msgs[0].payload == {"emoji": "\U0001f600", "greeting": "\u4f60\u597d"}
+
+        # Multiple subscribers all receive the same message
+        multi_sub_results: list[list[Message]] = [[], [], []]
+
+        async def multi_sub(i: int) -> None:
+            async for msg in ipc.subscribe("fanout"):
+                multi_sub_results[i].append(msg)
+                return
+
+        tasks = [asyncio.create_task(multi_sub(i)) for i in range(3)]
+        await asyncio.sleep(0.01)
+        await ipc.publish("fanout", {"broadcast": True})
+        for t in tasks:
+            await asyncio.wait_for(t, timeout=2.0)
+        for i in range(3):
+            assert len(multi_sub_results[i]) == 1
+            assert multi_sub_results[i][0].payload == {"broadcast": True}
+
     asyncio.run(go())
 
 

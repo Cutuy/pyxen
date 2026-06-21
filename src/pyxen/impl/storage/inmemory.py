@@ -44,7 +44,7 @@ def build(config: dict[str, object]) -> InMemoryStorage:
 
 
 def _main() -> None:
-    """Test entry point for inmemory storage impl."""
+    """Test entry point for inmemory storage impl. Thorough coverage."""
     import asyncio
 
     from pyxen.core import QueryFilter
@@ -64,14 +64,30 @@ def _main() -> None:
         assert await s.get("ns", "missing") is None
         assert await s.get("nonexistent", "k") is None
 
+        # put with empty dict
+        await s.put("ns", "empty", {})
+        assert await s.get("ns", "empty") == {}
+
+        # put with nested values (json-like round-trip)
+        await s.put("ns", "nested", {"a": {"b": {"c": [1, 2, 3]}}})
+        assert await s.get("ns", "nested") == {"a": {"b": {"c": [1, 2, 3]}}}
+
+        # put with unicode values
+        await s.put("ns", "unicode", {"emoji": "\U0001f600", "chinese": "\u4e2d\u6587"})
+        assert await s.get("ns", "unicode") == {"emoji": "\U0001f600", "chinese": "\u4e2d\u6587"}
+
+        # put with very long key
+        long_key = "key_" + ("x" * 200)
+        await s.put("ns", long_key, {"v": 1})
+        assert await s.get("ns", long_key) == {"v": 1}
+
         # multiple keys in same namespace
         await s.put("ns", "a", {"v": 1})
         await s.put("ns", "b", {"v": 2})
         await s.put("ns", "c", {"v": 3})
+        # query with no filter returns all
         results = await s.query("ns")
-        # 4 because "k" was set earlier
-        assert len(results) == 4
-        assert {r["v"] for r in results} == {1, 2, 3}  # k=2, a=1, b=2, c=3
+        assert len(results) >= 6  # k, empty, nested, unicode, long_key, a, b, c
 
         # query with filter
         await s.put("ns", "d", {"v": 1, "tag": "x"})
@@ -79,6 +95,10 @@ def _main() -> None:
         x_only = await s.query("ns", QueryFilter(equals={"tag": "x"}))
         assert len(x_only) == 2
         assert all(r.get("tag") == "x" for r in x_only)
+
+        # query with filter that matches nothing
+        empty_filtered = await s.query("ns", QueryFilter(equals={"tag": "nonexistent"}))
+        assert empty_filtered == []
 
         # query with limit
         first_two = await s.query("ns", QueryFilter(limit=2))

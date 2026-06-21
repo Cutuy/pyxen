@@ -126,10 +126,31 @@ def _main() -> None:
     assert fail.satisfied is False
     assert fail.missing == ["numpy", "pandas"]
 
-    # Snapshot equality is by value (dataclass default)
+    # Dataclass equality by value (not identity)
     s1 = Snapshot(packages=[PackageInfo("a", "1", "pip")], timestamp=100.0)
     s2 = Snapshot(packages=[PackageInfo("a", "1", "pip")], timestamp=100.0)
     assert s1 == s2
+    s3 = Snapshot(packages=[PackageInfo("a", "2", "pip")], timestamp=100.0)
+    assert s1 != s3
+
+    # PackageInfo equality
+    p1 = PackageInfo("a", "1", "pip")
+    p2 = PackageInfo("a", "1", "pip")
+    p3 = PackageInfo("a", "2", "pip")
+    assert p1 == p2
+    assert p1 != p3
+
+    # VerificationResult equality
+    v1 = VerificationResult(satisfied=True, missing=[])
+    v2 = VerificationResult(satisfied=True, missing=[])
+    v3 = VerificationResult(satisfied=False, missing=["x"])
+    assert v1 == v2
+    assert v1 != v3
+
+    # Protocol methods count
+    _protocol_methods = {"ensure", "verify", "snapshot", "ensure_python", "ensure_from_manifest"}
+    _pkg_attrs = {a for a in dir(PkgImpl) if not a.startswith("_") and callable(getattr(PkgImpl, a, None))}
+    assert _protocol_methods.issubset(_pkg_attrs), f"missing methods: {_protocol_methods - _pkg_attrs}"
 
 
 if __name__ == "__main__":

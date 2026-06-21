@@ -133,6 +133,20 @@ def _main() -> None:
                 assert check5.budget is not None
                 assert check5.budget.daily_limit == 100_000  # default
 
+            # Persistence: charge, then re-load from the same file
+            with tempfile.TemporaryDirectory() as tmp4:
+                f = Path(tmp4) / "b.json"
+                b_persist = build({"path": str(f), "daily_limit": 1000})
+                await b_persist.charge("gpt-4o", tokens=600, dollars=0.0)
+                # Re-load from the same file
+                b_reload = build({"path": str(f), "daily_limit": 1000})
+                check6 = await b_reload.check("gpt-4o", 500)
+                assert check6.allowed is True
+                assert check6.reason is not None  # 600+500=1100 > 1000
+                assert check6.remaining == 0
+                check7 = await b_reload.check("gpt-4o", 1)
+                assert check7.remaining == 399  # 1000 - 600 - 1 = 399
+
     asyncio.run(go())
 
     # Missing path raises
