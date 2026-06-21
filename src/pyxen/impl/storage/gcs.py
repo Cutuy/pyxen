@@ -37,8 +37,8 @@ import threading
 from typing import Any
 
 try:
-    from google.cloud import storage  # type: ignore[import-not-found]
-    from google.oauth2 import service_account  # type: ignore[import-not-found]
+    from google.cloud import storage
+    from google.oauth2 import service_account
 
     _HAS_GCS = True
 except ImportError:
@@ -88,8 +88,7 @@ class GcsStorage:
         if self._client is not None:
             return
         with self._lock:
-            if self._client is not None:
-                return
+            assert self._client is None, "client raced in lock"
 
             if self._credentials_path is not None:
                 self._client = storage.Client.from_service_account_json(
@@ -144,6 +143,7 @@ class GcsStorage:
         self, namespace: str, filter: QueryFilter | None = None
     ) -> list[dict[str, Any]]:
         self._ensure_client()
+        assert self._client is not None
         try:
             prefix = self._namespace_prefix(namespace)
             with self._lock:
