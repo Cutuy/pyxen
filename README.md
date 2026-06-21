@@ -1,15 +1,8 @@
 # pyxen — Portable Python Runtime for Agent Apps
 
 
-**pyxen** is a lightweight **Python runtime interface** that makes AI agent-built apps **portable** — run them locally, share them with others, or deploy to the cloud without rewriting a single line of code. Swap storage, secrets, observability, identity, IPC, package management, and LLM tokens by editing one `runtime.json`. The agentic runtime itself can be fully stripped away — **the app stays.**
+Agentic runtimes lock apps to themselves. pyxen flips this: 7 primitives (storage, secrets, identity, tokens, observability, pkg, ipc) with pluggable backends — swap via `runtime.json`, no code changes. The agentic runtime can build standalone apps that run elsewhere, or be shared.
 
-Agentic runtimes typically build apps locked to their runtime. pyxen flips this: apps use a pluggable runtime config — the agentic runtime can build standalone apps that run elsewhere, or can be shared.
-
-> **One-line summary:** A 7-primitive runtime for portable Python apps. Swap backends via `runtime.json`. No code changes.
-
-## Why pyxen?
-
-AI coding agents hardcode environment-specific APIs (`os.environ`, `boto3`, etc.). pyxen decouples the app from its environment via 7 primitives — swap backends by changing one JSON file, no code changes.
 
 ## What
 
