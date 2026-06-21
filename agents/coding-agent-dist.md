@@ -4,7 +4,7 @@ A 7-primitive userland runtime for portable Python apps. Read the full reference
 
 - **`pyxen/README.md`** — all 7 primitives, method signatures, implementations, CLI, examples.
 - **`pyxen/examples/`** — runnable apps (hello_runtime, data_pipeline, notes_app, a2a_chat).
-- **`pyxen/docs/userland-runtime.md`** — design rationale.
+- **`pyxen/docs/vision.md`** — design rationale.
 
 ## Core rule
 

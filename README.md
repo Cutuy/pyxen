@@ -127,20 +127,10 @@ The [`agents/`](./agents/) directory gives agents the instructions they need to 
 
 Include the relevant file when asking your agent to build an app.
 
-## Keywords & topics
-
-`python` `runtime` `portability` `agents` `agent-runtime` `a2a` `observability`
-
 ## Roadmap
 
 - Agent skill or plugin that builds or translates apps into pyxen runtime rather than using their natives
 - Stateful runtime and daemon
-
-## License
-
-MIT. See [`LICENSE`](./LICENSE). Attributions in [`NOTICE.md`](./NOTICE.md).
-
-> This project was entirely AI-generated. Every line of code was written by an AI language model (Claude, DeepSeek) under human direction. The README, the docs, the tests, the slides — all of it. Use it, fork it, ship it. Just know the author never touched a keyboard to write a single line.
 
 ## Fun fact
 
