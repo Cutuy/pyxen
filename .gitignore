@@ -63,3 +63,6 @@ budget.json
 opencode.json
 .opencode-data/
 .opencode/node_modules/
+
+# Package management lockfiles (not using uv/pipenv/poetry for this project)
+uv.lock

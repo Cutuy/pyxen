@@ -1,0 +1,34 @@
+{
+  "version": "1",
+  "identity": {
+    "implementation": "env",
+    "config": {}
+  },
+  "ipc": {
+    "implementation": "a2a",
+    "config": {
+      "agents": {
+        "demo-agent": {
+          "url": "http://localhost:8080/"
+        }
+      },
+      "timeout_seconds": 10
+    }
+  },
+  "pkg": {
+    "implementation": "dry_run",
+    "config": {}
+  },
+  "storage": {
+    "implementation": "inmemory",
+    "config": {}
+  },
+  "secrets": {
+    "implementation": "dotenv",
+    "config": { "path": "./.env" }
+  },
+  "observability": {
+    "implementation": "stdout",
+    "config": { "level": "info" }
+  }
+}
