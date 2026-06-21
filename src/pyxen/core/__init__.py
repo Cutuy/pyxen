@@ -33,7 +33,7 @@ from .manifest import (
     parse_manifest,
 )
 from .observability import ObservabilityImpl, Span
-from .pkg import PkgImpl
+from .pkg import PackageInfo, PkgImpl, Snapshot, VerificationResult
 from .runtime import Runtime
 from .secrets import SecretsImpl
 from .storage import QueryFilter, StorageImpl
@@ -56,6 +56,7 @@ __all__ = [
     "Message",
     "ObservabilityError",
     "ObservabilityImpl",
+    "PackageInfo",
     "PkgError",
     "PkgImpl",
     "PrimitiveBinding",
@@ -64,11 +65,13 @@ __all__ = [
     "Runtime",
     "SecretsError",
     "SecretsImpl",
+    "Snapshot",
     "Span",
     "StorageError",
     "StorageImpl",
     "TokenBudgetExceeded",
     "TokensImpl",
+    "VerificationResult",
     "load_manifest",
     "parse_manifest",
 ]

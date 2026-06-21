@@ -52,6 +52,8 @@ MODULES: tuple[str, ...] = (
     "pyxen.impl.ipc.a2a",
     # impl: pkg
     "pyxen.impl.pkg.dry_run",
+    "pyxen.impl.pkg.pip",
+    "pyxen.impl.pkg.uv",
     # impl: secrets
     "pyxen.impl.secrets.dotenv",
     "pyxen.impl.secrets.local_file",
