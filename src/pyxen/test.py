@@ -49,6 +49,7 @@ MODULES: tuple[str, ...] = (
     "pyxen.impl.tokens.openai_usage",
     # impl: ipc
     "pyxen.impl.ipc.inproc",
+    "pyxen.impl.ipc.a2a",
     # impl: pkg
     "pyxen.impl.pkg.dry_run",
     # impl: secrets

@@ -36,6 +36,11 @@ cloud = [
     "boto3>=1.34",
     "google-cloud-storage>=2.14",
 ]
+# A2A IPC protocol (Agent-to-Agent)
+a2a = [
+    "httpx>=0.27",
+    "httpx-sse>=0.4",
+]
 # Examples (notes_app uses FastAPI)
 examples = [
     "fastapi>=0.110",
@@ -87,6 +92,14 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "google.oauth2.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "httpx.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "httpx_sse.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
