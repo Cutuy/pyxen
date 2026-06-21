@@ -5,14 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "pyxen"
 version = "0.2.0a1"
-description = "A userland runtime interface for portable Python apps. 7 environment-shaped primitives."
+description = "A runtime interface for portable Python apps. 7 environment-shaped primitives."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
     { name = "Cutuy" }
 ]
-keywords = ["runtime", "portability", "agents", "userland"]
+keywords = ["runtime", "portability", "agents", "a2a", "observability"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
