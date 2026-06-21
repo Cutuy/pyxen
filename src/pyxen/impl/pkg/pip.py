@@ -191,8 +191,8 @@ def _main() -> None:
                 "httpx[socks]>=0.27\n"
                 "-r other.txt\n"
             )
-            names = PipPkg._parse_requirements(f)
-            assert names == ["numpy", "pandas", "httpx"], names
+            parsed = PipPkg._parse_requirements(f)
+            assert parsed == ["numpy", "pandas", "httpx"], parsed
 
         # verify() checks installed vs requirements
         result = await impl.verify()
