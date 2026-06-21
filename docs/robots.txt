@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+
+# pyxen docs site (GitHub Pages)
+# Sitemap: https://cutuy.github.io/pyxen/sitemap.xml
+Sitemap: https://cutuy.github.io/pyxen/sitemap.xml

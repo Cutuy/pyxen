@@ -1,6 +1,25 @@
-# pyxen
+# pyxen — Portable Python Runtime for Agent Apps
 
-A userland runtime interface that makes AI agent-built apps portable — run them locally, share with others, or deploy to the cloud without rewriting them. Portability also means the agentic runtime can be fully stripped away — the app stays.
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+[![Topic: runtime](https://img.shields.io/badge/topic-runtime-orange)](https://github.com/topics/runtime)
+[![Topic: agent-runtime](https://img.shields.io/badge/topic-agent--runtime-orange)](https://github.com/topics/agent-runtime)
+
+**pyxen** is a lightweight **Python runtime interface** that makes AI agent-built apps **portable** — run them locally, share them with others, or deploy to the cloud without rewriting a single line of code. Swap storage, secrets, observability, identity, IPC, package management, and LLM tokens by editing one `runtime.json`. The agentic runtime itself can be fully stripped away — **the app stays.**
+
+It is an **agent-agnostic, userland runtime** — not a framework, not a sidecar. Drop it next to any Python project (agent or not), and the same code runs against a local filesystem, SQLite, Redis, GCS, OpenAI Agents SDK tracing, environment variables, macOS Keychain, JSON-RPC A2A IPC, in-memory backends, or any combination thereof.
+
+> **One-line summary:** A 7-primitive userland runtime for portable Python apps. Swap backends via `runtime.json`. No code changes.
+
+## Why pyxen?
+
+AI coding agents write code that hardcodes environment-specific APIs — `os.environ`, `boto3.client("s3")`, `openai-agents.trace(...)`, raw `pip install` calls. That code is locked to one machine, one cloud, one vendor. **pyxen is the layer that decouples the app from its environment.**
+
+- **Portability** — same code, dev → staging → prod, by changing one JSON file.
+- **Agent-friendly** — works alongside OpenAI Agents SDK, A2A, MCP, or no agent at all.
+- **Zero infrastructure** — no sidecars, no Kubernetes, no service mesh. Pure userland Python.
+- **7 primitives, dozens of backends** — identity, ipc, observability, pkg, secrets, storage, tokens.
+- **Strict runtime contract** — `pyxen validate` and `pyxen doctor` fail fast before your app does.
 
 ## What
 
@@ -124,6 +143,10 @@ The [`agents/`](./agents/) directory gives agents the instructions they need to 
 | [`agents/openclaw-dist.md`](./agents/openclaw-dist.md) | Use with OpenClaw agents to activate the Forge sub-agent (see [`agents/forge/`](./agents/forge/)). |
 
 Include the relevant file when asking your agent to build an app.
+
+## Keywords & topics
+
+`python` `python3` `runtime` `userland` `portability` `agents` `ai-agents` `agent-runtime` `openai-agents` `a2a` `json-rpc` `llm` `python-package` `infrastructure` `observability`
 
 ## Roadmap
 
