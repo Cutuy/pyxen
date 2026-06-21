@@ -114,6 +114,17 @@ uvicorn examples.notes_app.app:app --reload
 ```
 
 
+## Agent distribution artifacts
+
+The [`agents/`](./agents/) directory gives agents the instructions they need to **write portable apps using pyxen**.
+
+| File | When to use |
+|---|---|
+| [`agents/coding-agent-dist.md`](./agents/coding-agent-dist.md) | Point any agent at this to build pyxen apps. |
+| [`agents/openclaw-dist.md`](./agents/openclaw-dist.md) | Use with OpenClaw agents to activate the Forge sub-agent (see [`agents/forge/`](./agents/forge/)). |
+
+Include the relevant file when asking your agent to build an app.
+
 ## Roadmap
 
 - Agent skill or plugin that builds or translates apps into pyxen runtime rather than using their natives
