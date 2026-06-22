@@ -26,6 +26,9 @@ else
     echo "  README updated and amended into commit"
 fi
 
+echo "→ integration test staleness check..."
+"$PYTHON" scripts/check-integration-staleness.py
+
 echo "→ secrets check (LLM)..."
 "$PYTHON" scripts/check-secrets.py
 

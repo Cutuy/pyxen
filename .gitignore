@@ -64,5 +64,8 @@ opencode.json
 .opencode-data/
 .opencode/node_modules/
 
+# Integration test tracking
+.last-integration-test
+
 # Package management lockfiles (not using uv/pipenv/poetry for this project)
 uv.lock

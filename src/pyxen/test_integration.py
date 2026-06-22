@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+from pathlib import Path
 
 MODULES: tuple[str, ...] = (
     "pyxen.core.ext.cron.test_crontab",
@@ -73,6 +74,13 @@ def main() -> int:
     total = len(MODULES)
     passed = total - failed
     print(f"\n{passed} passed, {failed} failed, {total} total")
+
+    if not failed:
+        repo_root = Path(__file__).resolve().parent.parent.parent.parent
+        ts_path = repo_root / ".last-integration-test"
+        ts_path.write_text(str(time.time()))
+        print(f"→ timestamp written to {ts_path}")
+
     return 1 if failed else 0
 
 
