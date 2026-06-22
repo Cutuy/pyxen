@@ -66,19 +66,6 @@ from typing import Any
 from ...core.errors import StorageError
 from ...core.storage import QueryFilter
 
-# Optional SDK import. Used to parse mount entries in the same shape the
-# openai-agents SDK expects, so a runtime.json can be shared between a
-# pyxen app and an Agents SDK consumer.
-try:
-    from agents.sandbox.entries import BaseEntry, LocalDir, S3Mount  # noqa: F401
-    _HAS_SDK = True
-except ImportError:  # pragma: no cover
-    LocalDir = None  # type: ignore[assignment,misc]
-    S3Mount = None  # type: ignore[assignment,misc]
-    BaseEntry = None  # type: ignore[assignment,misc]
-    _HAS_SDK = False
-
-
 class _ResolvedMount:
     """Internal representation of a single mount, after parsing the config.
 
@@ -114,7 +101,9 @@ def _parse_mount_entry(namespace: str, raw: dict[str, Any]) -> _ResolvedMount:
         )
 
     if entry_type == "local_dir":
-        if not _HAS_SDK:
+        try:
+            from agents.sandbox.entries import LocalDir
+        except ImportError:
             raise StorageError(
                 f"local_dir mount for {namespace!r} requires the 'openai-agents' "
                 "package to parse the mount entry; install with "
@@ -140,7 +129,9 @@ def _parse_mount_entry(namespace: str, raw: dict[str, Any]) -> _ResolvedMount:
     if entry_type in ("s3_mount", "gcs_mount", "r2_mount", "azure_blob_mount", "box_mount"):
         # Cloud mounts are a roadmap item. The config is parsed and stored,
         # but the actual materialization is not implemented in v0.
-        if not _HAS_SDK:
+        try:
+            from agents.sandbox.entries import S3Mount
+        except ImportError:
             raise StorageError(
                 f"{entry_type} mount for {namespace!r} requires the 'openai-agents' "
                 "package to parse the mount entry; install with "
