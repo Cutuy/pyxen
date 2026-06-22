@@ -21,6 +21,7 @@
     "observability":   { "$ref": "#/$defs/primitive" },
     "cron": {
       "type": "object",
+      "description": "Declarative cron jobs. Jobs are auto-scheduled on runtime load via the OS-native backend (crontab on Linux/macOS, schtasks on Windows). The {APP_DIR} placeholder in command is resolved to the runtime.json directory at schedule time.",
       "properties": {
         "on_duplicate": {
           "type": "string",
@@ -42,7 +43,7 @@
               },
               "command": {
                 "type": "string",
-                "description": "Command or script to execute."
+                "description": "Command or script to execute. {APP_DIR} is resolved to the directory containing runtime.json at schedule time."
               },
               "schedule": {
                 "type": "string",

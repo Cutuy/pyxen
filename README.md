@@ -71,7 +71,7 @@ pyxen test        # run test suite
 
 ## Examples
 
-The `examples/` directory has 4 runnable apps. Each one shows the runtime doing a different job.
+The `examples/` directory has 5 runnable apps. Each one shows the runtime doing a different job.
 
 ### [`a2a_chat`](./examples/a2a_chat/README.md)
 
@@ -81,6 +81,16 @@ Supports both request/reply (``tasks/sendMessage``) and streaming
 
 ```bash
 uvicorn examples.a2a_chat.agent:app --reload --port 8080
+```
+
+### [`cron_app`](./examples/cron_app/README.md)
+
+Loads a runtime.json that declares two cron jobs. The runtime auto-schedules
+them on startup via the OS-native backend (crontab on Linux/macOS, schtasks on
+Windows). The app itself is hands-off — it never calls a scheduler API.
+
+```bash
+python -m examples.cron_app.main
 ```
 
 ### [`data_pipeline`](./examples/data_pipeline/README.md)
