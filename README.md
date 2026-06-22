@@ -59,6 +59,9 @@ pyxen doctor      # verify impls are importable
 Extensions live under `pyxen.core.ext.*` and are initialized from
 their section in `runtime.json`.
 
+Extensions may be stateful or cause lingering effects on the system
+and are therefore **strictly optional**.
+
 
 ## How it compares
 
