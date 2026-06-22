@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TS_PATH = REPO_ROOT / ".last-integration-test"
+TS_PATH = REPO_ROOT / ".last_integration_test"
 STALE_SECONDS = 86400  # 24 hours
 
 
@@ -23,7 +23,7 @@ def main() -> int:
     try:
         last = float(TS_PATH.read_text().strip())
     except (ValueError, OSError):
-        print("⚠️  Could not read .last-integration-test timestamp")
+        print("⚠️  Could not read .last_integration_test timestamp")
         return 0
 
     elapsed = time.time() - last

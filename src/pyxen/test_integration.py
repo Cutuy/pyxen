@@ -76,8 +76,8 @@ def main() -> int:
     print(f"\n{passed} passed, {failed} failed, {total} total")
 
     if not failed:
-        repo_root = Path(__file__).resolve().parent.parent.parent.parent
-        ts_path = repo_root / ".last-integration-test"
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        ts_path = repo_root / ".last_integration_test"
         ts_path.write_text(str(time.time()))
         print(f"→ timestamp written to {ts_path}")
 
