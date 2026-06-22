@@ -244,9 +244,10 @@ def _main() -> None:
             assert s1 is not None
             assert str(app_dir / ".pyxen" / "cron-state.jsonl") in str(s1._path)
 
-            s2 = _make_state_store({"state": {"path": "/custom/state.jsonl"}}, app_dir)
+            custom = app_dir / "custom" / "state.jsonl"
+            s2 = _make_state_store({"state": {"path": str(custom)}}, app_dir)
             assert s2 is not None
-            assert str(s2._path) == "/custom/state.jsonl"
+            assert str(s2._path) == str(custom)
 
             s3 = _make_state_store({}, None)
             assert s3 is None
