@@ -1,4 +1,4 @@
-# pyxen — A lightweight, portable Python runtime that decouples agent logic from underlying provider implementations.
+# pyxen — A lightweight, portable Python library that decouples agent logic from underlying provider implementations.
 
 Swap storage, secrets, identity, tokens, observability, package management, and IPC via `runtime.json`. Zero code changes.
 
