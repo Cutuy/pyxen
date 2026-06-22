@@ -25,6 +25,8 @@ from .manifest import (
     load_manifest,
     SECRET_REF_KEY,
 )
+from .observability import ObservabilityImpl
+from .secrets import SecretsImpl
 
 
 # Map a primitive name to:
@@ -65,23 +67,21 @@ class Runtime:
         manifest = load_manifest(path)
         rt = cls(manifest)
 
-        # Phase 0: build secrets primitive first (if declared)
-        secrets_binding = manifest.bindings.get("secrets")
-        secrets_impl = None
-        if secrets_binding is not None:
-            secrets_impl = await cls._instantiate(
-                "secrets",
-                secrets_binding.implementation,
-                secrets_binding.config,
-            )
-            rt._impls["secrets"] = secrets_impl
+        # Phase 0: build primitives with no dependencies
+        for dep_name in ("secrets", "observability"):
+            binding = manifest.bindings.get(dep_name)
+            if binding is not None:
+                impl = await cls._instantiate(
+                    dep_name, binding.implementation, binding.config,
+                )
+                rt._impls[dep_name] = impl
 
-        # Phase 1: build remaining primitives
+        # Phase 1: build remaining primitives, injecting dependencies
         for primitive, binding in manifest.bindings.items():
-            if primitive == "secrets":
-                continue  # already built in phase 0
+            if primitive in ("secrets", "observability"):
+                continue
             needs_secrets = _config_has_secret_refs(binding.config)
-            if needs_secrets and secrets_impl is None:
+            if needs_secrets and "secrets" not in rt._impls:
                 raise ManifestError(
                     f"config references {SECRET_REF_KEY} but no secrets primitive declared"
                 )
@@ -89,7 +89,8 @@ class Runtime:
                 primitive,
                 binding.implementation,
                 binding.config,
-                secrets=secrets_impl if needs_secrets else None,
+                secrets=rt._impls.get("secrets") if needs_secrets else None,
+                observability=rt._impls.get("observability"),
             )
             rt._impls[primitive] = impl
 
@@ -115,16 +116,9 @@ class Runtime:
         implementation: str,
         config: dict[str, Any],
         *,
-        secrets: Any = None,
+        secrets: SecretsImpl | None = None,
+        observability: ObservabilityImpl | None = None,
     ) -> Any:
-        """Resolve an implementation module and call its ``build(config)``.
-
-        The optional ``secrets`` kwarg is passed to ``build()`` when the
-        binding's config contains ``$secret`` references. Existing impls
-        that don't accept the kwarg receive ``build(config, secrets=None)``
-        which is harmless — only impls with ``$secret`` refs get a non-None
-        value.
-        """
         package = PRIMITIVE_TABLE.get(primitive)
         if package is None:
             raise ImplementationNotFoundError(
@@ -143,11 +137,13 @@ class Runtime:
             raise ImplementationNotFoundError(
                 f"implementation module '{module_name}' is missing a 'build' function"
             )
-        sig_params = inspect.signature(build).parameters
-        if secrets is not None and "secrets" in sig_params:
-            result = build(config, secrets=secrets)
-        else:
-            result = build(config)
+        sig = inspect.signature(build).parameters
+        kwargs: dict[str, Any] = {}
+        if secrets is not None and "secrets" in sig:
+            kwargs["secrets"] = secrets
+        if observability is not None and "observability" in sig:
+            kwargs["observability"] = observability
+        result = build(config, **kwargs)
         if hasattr(result, "__await__"):
             result = await result
         return result

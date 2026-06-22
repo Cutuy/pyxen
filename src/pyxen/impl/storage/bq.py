@@ -33,10 +33,12 @@ import os
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Awaitable
 from typing import Any
 
 from ...core.errors import StorageError
 from ...core.manifest import SECRET_REF_KEY
+from ...core.observability import ObservabilityImpl
 from ...core.secrets import SecretsImpl
 from ...core.storage import QueryFilter
 
@@ -49,6 +51,7 @@ class BqStorage:
         config: dict[str, object],
         *,
         secrets: SecretsImpl | None = None,
+        observability: ObservabilityImpl | None = None,
     ) -> None:
         self._bq_path = shutil.which("bq")
         if self._bq_path is None:
@@ -70,6 +73,7 @@ class BqStorage:
         self._table: str = table
 
         self._secrets = secrets
+        self._observability = observability
 
         self._secret_ref: str | None = None
         raw_creds = config.get("credentials")
@@ -95,22 +99,19 @@ class BqStorage:
         if self._resolved:
             return
         async with self._env_lock:
-            if self._resolved:
-                return
-
-            assert self._secret_ref is not None and self._secrets is not None
-            secret_value = await self._secrets.get(self._secret_ref)
-            fd, path = tempfile.mkstemp(
-                suffix=".json", prefix="pyxen-bq-creds-"
-            )
-            try:
-                os.write(fd, secret_value.encode("utf-8"))
-            finally:
-                os.close(fd)
-            self._temp_cred_file = path
-            self._credentials_resolved_path = path
-
-            self._resolved = True
+            if not self._resolved:
+                assert self._secret_ref is not None and self._secrets is not None
+                secret_value = await self._secrets.get(self._secret_ref)
+                fd, path = tempfile.mkstemp(
+                    suffix=".json", prefix="pyxen-bq-creds-"
+                )
+                try:
+                    os.write(fd, secret_value.encode("utf-8"))
+                finally:
+                    os.close(fd)
+                self._temp_cred_file = path
+                self._credentials_resolved_path = path
+                self._resolved = True
 
     def _env(self) -> dict[str, str]:
         """Build the subprocess environment."""
@@ -125,10 +126,10 @@ class BqStorage:
     async def _run_bq(
         self, args: list[str], input_data: str | None = None
     ) -> subprocess.CompletedProcess[str]:
-        """Run a ``bq`` CLI command via ``asyncio.to_thread``."""
         await self._resolve_credentials()
         env = self._env()
-        cmd = [self._bq_path, *args]
+        assert self._bq_path is not None
+        cmd: list[str] = [self._bq_path, *args]
 
         def _run() -> subprocess.CompletedProcess[str]:
             return subprocess.run(
@@ -139,6 +140,15 @@ class BqStorage:
                 env=env,
                 timeout=60,
             )
+
+        if self._observability is not None:
+            async with self._observability.trace("bq") as span:
+                span.set_attribute("args", " ".join(cmd))
+                result = await asyncio.to_thread(_run)
+                span.set_attribute("exit_code", result.returncode)
+                if result.returncode != 0:
+                    span.log("error", result.stderr.strip())
+                return result
 
         return await asyncio.to_thread(_run)
 
@@ -294,8 +304,9 @@ def build(
     config: dict[str, object],
     *,
     secrets: SecretsImpl | None = None,
+    observability: ObservabilityImpl | None = None,
 ) -> BqStorage:
-    return BqStorage(config, secrets=secrets)
+    return BqStorage(config, secrets=secrets, observability=observability)
 
 
 def _main() -> None:
@@ -416,7 +427,7 @@ def _main() -> None:
         async def _run_tests() -> None:
             passed = 0
             failed = 0
-            cases: list[tuple[str, object]] = [
+            cases: list[tuple[str, Awaitable[Any]]] = [
                 ("put/get", test_put_get(s)),
                 ("overwrite", test_overwrite(s)),
                 ("missing returns None", test_missing(s)),
@@ -431,7 +442,7 @@ def _main() -> None:
             ]
             for name, coro in cases:
                 try:
-                    await coro  # type: ignore[arg-type]
+                    await coro
                     passed += 1
                     print(f"  ✓ {name}")
                 except Exception as e:
