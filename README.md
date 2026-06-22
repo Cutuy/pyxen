@@ -73,25 +73,23 @@ their section in `runtime.json`.
 |---|---|
 | [`a2a_chat`](./examples/a2a_chat/) | Runs an A2A-compatible agent that processes tasks sent via JSON-RPC.
 Supports both request/reply (``tasks/sendMessage``) and streaming
-(``tasks/sendStreamingMessage``) interaction patterns — `uvicorn examples.a2a_chat.agent:app --reload --port 8080` |
+(``tasks/sendStreamingMessage``) interaction patterns |
 | [`cron_app`](./examples/cron_app/) | Loads a runtime.json that declares two cron jobs. The runtime auto-schedules
 them on startup via the OS-native backend (crontab on Linux/macOS, schtasks on
-Windows). The app itself is hands-off — it never calls a scheduler API — `python -m examples.cron_app.main` |
+Windows). The app itself is hands-off — it never calls a scheduler API |
 | [`data_pipeline`](./examples/data_pipeline/) | The point is to demonstrate that the **only thing** that changes between
 "local dev" and "production deploy" is the ``runtime.json`` file. The
-script code is identical — `PYTHONPATH=src python examples/data_pipeline/pipeline.py` |
+script code is identical |
 | [`hello_runtime`](./examples/hello_runtime/) | A 30-line Python program that loads the runtime, exercises 3 primitives,
 and prints a single line. It does the smallest possible thing that proves
-the runtime architecture works end-to-end — `python -m examples.hello_runtime.main` |
+the runtime architecture works end-to-end |
 | [`notes_app`](./examples/notes_app/) | This is a plain web app: no agents, no LLM calls. The point is to
 demonstrate that the runtime serves a normal Python web app just as well
-as an agent-containing one — `pip install pyxen[examples]      # adds fastapi + uvicorn
-pyxen validate runtime.json
-uvicorn examples.notes_app.app:app --reload` |
+as an agent-containing one |
 | [`pkg_demo`](./examples/pkg_demo/) | The runtime.json declares ``pkg`` with the ``pip`` implementation,
 pointing to a ``requirements.txt``. On load, app code calls
 ``rt.pkg.ensure()`` to install any missing PyPI packages, then
-imports and uses them normally — `python -m examples.pkg_demo.main` |
+imports and uses them normally |
 
 
 ## Agent distribution artifacts

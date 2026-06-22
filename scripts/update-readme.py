@@ -402,13 +402,10 @@ def build_examples_section(examples: list[dict[str, str]]) -> str:
     ]
     for ex in examples:
         blurb = ex["blurb"] or ""
-        # Strip trailing period for consistency
         if blurb.endswith("."):
             blurb = blurb[:-1]
-        run_cmd = ex["run_cmd"] or ""
-        cmd_suffix = f" — `{run_cmd}`" if run_cmd else ""
         lines.append(
-            f"| [`{ex['name']}`](./{ex['rel_path']}/) | {blurb}{cmd_suffix} |"
+            f"| [`{ex['name']}`](./{ex['rel_path']}/) | {blurb} |"
         )
     return "\n".join(lines) + "\n"
 
