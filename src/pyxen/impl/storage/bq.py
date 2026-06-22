@@ -43,6 +43,9 @@ from ...core.secrets import SecretsImpl
 from ...core.storage import QueryFilter
 
 
+_BQ_ENV_KEYS = ("PATH", "HOME", "USER", "TMPDIR", "TEMP", "TMP")
+
+
 class BqStorage:
     """Storage impl backed by BigQuery via the ``bq`` CLI."""
 
@@ -114,8 +117,16 @@ class BqStorage:
                 self._resolved = True
 
     def _env(self) -> dict[str, str]:
-        """Build the subprocess environment."""
-        env = dict(os.environ)
+        """Build the subprocess environment.
+
+        Starts from a clean slate to avoid leaking machine-local
+        ``gcloud`` / ``bq`` configuration — only passes the
+        pyxen-controlled vars so the app stays portable.
+        """
+        env: dict[str, str] = {}
+        for _k in _BQ_ENV_KEYS:
+            if _k in os.environ:
+                env[_k] = os.environ[_k]
         env["CLOUDSDK_CORE_PROJECT"] = self._project
         if self._credentials_resolved_path is not None:
             env["GOOGLE_APPLICATION_CREDENTIALS"] = (
@@ -332,7 +343,10 @@ def _main() -> None:
     dataset = f"pyxen_test_{suffix}"
     table = "items"
 
-    env = dict(os.environ)
+    env: dict[str, str] = {}
+    for _k in _BQ_ENV_KEYS:
+        if _k in os.environ:
+            env[_k] = os.environ[_k]
     env["CLOUDSDK_CORE_PROJECT"] = project
 
     def _run(
