@@ -71,25 +71,12 @@ their section in `runtime.json`.
 
 | Example | What it shows |
 |---|---|
-| [`a2a_chat`](./examples/a2a_chat/) | Runs an A2A-compatible agent that processes tasks sent via JSON-RPC.
-Supports both request/reply (``tasks/sendMessage``) and streaming
-(``tasks/sendStreamingMessage``) interaction patterns |
-| [`cron_app`](./examples/cron_app/) | Loads a runtime.json that declares two cron jobs. The runtime auto-schedules
-them on startup via the OS-native backend (crontab on Linux/macOS, schtasks on
-Windows). The app itself is hands-off — it never calls a scheduler API |
-| [`data_pipeline`](./examples/data_pipeline/) | The point is to demonstrate that the **only thing** that changes between
-"local dev" and "production deploy" is the ``runtime.json`` file. The
-script code is identical |
-| [`hello_runtime`](./examples/hello_runtime/) | A 30-line Python program that loads the runtime, exercises 3 primitives,
-and prints a single line. It does the smallest possible thing that proves
-the runtime architecture works end-to-end |
-| [`notes_app`](./examples/notes_app/) | This is a plain web app: no agents, no LLM calls. The point is to
-demonstrate that the runtime serves a normal Python web app just as well
-as an agent-containing one |
-| [`pkg_demo`](./examples/pkg_demo/) | The runtime.json declares ``pkg`` with the ``pip`` implementation,
-pointing to a ``requirements.txt``. On load, app code calls
-``rt.pkg.ensure()`` to install any missing PyPI packages, then
-imports and uses them normally |
+| [`a2a_chat`](./examples/a2a_chat/) | Agent-to-agent protocol interaction |
+| [`cron_app`](./examples/cron_app/) | Declarative cron jobs auto-scheduled on startup |
+| [`data_pipeline`](./examples/data_pipeline/) | Same script, different runtime.json = local dev vs production |
+| [`hello_runtime`](./examples/hello_runtime/) | Smallest end-to-end runtime load, exercises 3 primitives |
+| [`notes_app`](./examples/notes_app/) | Plain web app using the runtime — no agents or LLM calls |
+| [`pkg_demo`](./examples/pkg_demo/) | Declare and install dependencies via the pkg primitive |
 
 
 ## Agent distribution artifacts

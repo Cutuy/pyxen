@@ -173,6 +173,15 @@ def _first_doc_line(path: Path) -> str:
 
 # ── 2b. Discover examples from examples/ ────────────────────────────
 
+EXAMPLE_BLURBS: dict[str, str] = {
+    "hello_runtime": "Smallest end-to-end runtime load, exercises 3 primitives",
+    "pkg_demo": "Declare and install dependencies via the pkg primitive",
+    "notes_app": "Plain web app using the runtime — no agents or LLM calls",
+    "data_pipeline": "Same script, different runtime.json = local dev vs production",
+    "a2a_chat": "Agent-to-agent protocol interaction",
+    "cron_app": "Declarative cron jobs auto-scheduled on startup",
+}
+
 _RUN_BLOCK_RE = re.compile(
     r"Run with[^\n]*?::?\s*\n((?:[ \t]+.+\n?)+)",
     re.MULTILINE,
@@ -401,9 +410,7 @@ def build_examples_section(examples: list[dict[str, str]]) -> str:
         "|---|---|",
     ]
     for ex in examples:
-        blurb = ex["blurb"] or ""
-        if blurb.endswith("."):
-            blurb = blurb[:-1]
+        blurb = EXAMPLE_BLURBS.get(ex["name"]) or ""
         lines.append(
             f"| [`{ex['name']}`](./{ex['rel_path']}/) | {blurb} |"
         )
