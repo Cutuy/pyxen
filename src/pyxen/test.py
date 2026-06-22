@@ -15,6 +15,7 @@ The single dependency is the Python standard library. The user invokes:
 from __future__ import annotations
 
 import importlib
+import io
 import sys
 import time
 import traceback
@@ -94,11 +95,28 @@ class ModuleResult(NamedTuple):
     name: str
     passed: bool
     duration_s: float
+    output: str = ""
     error: str | None = None
 
 
+def _has_issues(output: str) -> bool:
+    """Check if captured test output contains any SKIP, failure, or FAILED summary."""
+    for line in output.splitlines():
+        stripped = line.strip()
+        if (
+            stripped.startswith("SKIP")
+            or stripped.startswith("\u2717")
+            or "FAILED" in stripped
+        ):
+            return True
+    return False
+
+
 def run_one(name: str) -> ModuleResult:
-    """Import ``name`` and call its ``_main()``. Returns a result record."""
+    """Import ``name`` and call its ``_main()``, capturing stdout.
+
+    Returns a result record with the captured output.
+    """
     start = time.monotonic()
     if name in _EXAMPLE_MODULES:
         repo_root = project_root()
@@ -116,35 +134,47 @@ def run_one(name: str) -> ModuleResult:
 
     main = getattr(module, "_main", None)
     if main is None:
-        # No test entry point — not a failure, just a skip.
         return ModuleResult(name=name, passed=True, duration_s=time.monotonic() - start)
 
+    buf = io.StringIO()
+    old_stdout = sys.stdout
+    sys.stdout = buf
     try:
-        result = main()
-        if result is not None and isinstance(result, int):
-            # Module returned a non-zero exit code
+        try:
+            result = main()
+            if result is not None and isinstance(result, int) and result != 0:
+                return ModuleResult(
+                    name=name,
+                    passed=False,
+                    duration_s=time.monotonic() - start,
+                    output=buf.getvalue(),
+                    error=f"_main() returned {result}",
+                )
+        except AssertionError as exc:
             return ModuleResult(
                 name=name,
                 passed=False,
                 duration_s=time.monotonic() - start,
-                error=f"_main() returned {result}",
+                output=buf.getvalue(),
+                error=f"assertion failed: {exc}",
             )
-    except AssertionError as exc:
-        return ModuleResult(
-            name=name,
-            passed=False,
-            duration_s=time.monotonic() - start,
-            error=f"assertion failed: {exc}",
-        )
-    except Exception as exc:  # noqa: BLE001 — we report everything
-        return ModuleResult(
-            name=name,
-            passed=False,
-            duration_s=time.monotonic() - start,
-            error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}",
-        )
+        except Exception as exc:  # noqa: BLE001 — we report everything
+            return ModuleResult(
+                name=name,
+                passed=False,
+                duration_s=time.monotonic() - start,
+                output=buf.getvalue(),
+                error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}",
+            )
+    finally:
+        sys.stdout = old_stdout
 
-    return ModuleResult(name=name, passed=True, duration_s=time.monotonic() - start)
+    return ModuleResult(
+        name=name,
+        passed=True,
+        duration_s=time.monotonic() - start,
+        output=buf.getvalue(),
+    )
 
 
 def main(modules: list[str] | None = None, *, verbose: bool = True) -> int:
@@ -153,8 +183,8 @@ def main(modules: list[str] | None = None, *, verbose: bool = True) -> int:
     Args:
         modules: optional list of module names to test. Defaults to all
             modules registered in ``MODULES``.
-        verbose: if True, print per-module pass/fail; if False, only the
-            summary.
+        verbose: if True, print per-module pass/fail with test details;
+            if False, only the summary.
     """
     targets = modules if modules is not None else list(MODULES)
     results: list[ModuleResult] = []
@@ -162,13 +192,21 @@ def main(modules: list[str] | None = None, *, verbose: bool = True) -> int:
     for name in targets:
         result = run_one(name)
         results.append(result)
-        if verbose:
-            status = "ok  " if result.passed else "FAIL"
-            print(f"  {status}  {name}  ({result.duration_s * 1000:.1f} ms)")
-            if not result.passed and result.error:
-                # Print the first line of the error for quick scanning
-                first_line = result.error.splitlines()[0] if result.error else ""
-                print(f"        {first_line}")
+
+    for result in results:
+        ms = result.duration_s * 1000
+
+        if not result.passed:
+            print(f"  FAIL  {result.name}  ({ms:.1f} ms)")
+            _print_indented(result.output)
+            if result.error:
+                first = result.error.splitlines()[0]
+                print(f"        {first}")
+        elif _has_issues(result.output):
+            print(f"  ok?   {result.name}  ({ms:.1f} ms)")
+            _print_indented(result.output)
+        else:
+            print(f"  ok    {result.name}  ({ms:.1f} ms)")
 
     passed = sum(1 for r in results if r.passed)
     failed = len(results) - passed
@@ -178,6 +216,13 @@ def main(modules: list[str] | None = None, *, verbose: bool = True) -> int:
     print(f"{passed} passed, {failed} failed, {len(results)} total ({total_s * 1000:.1f} ms)")
 
     return 0 if failed == 0 else 1
+
+
+def _print_indented(output: str) -> None:
+    """Print captured output indented by two spaces."""
+    for line in output.splitlines():
+        if line.strip():
+            print(f"    {line}")
 
 
 if __name__ == "__main__":
