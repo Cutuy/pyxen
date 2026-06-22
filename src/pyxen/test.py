@@ -89,15 +89,20 @@ class ModuleResult(NamedTuple):
     error: str | None = None
 
 
-def _has_issues(output: str) -> bool:
-    """Check if captured test output contains any SKIP, failure, or FAILED summary."""
+def _has_failures(output: str) -> bool:
+    """Check if captured test output contains any failure markers."""
     for line in output.splitlines():
         stripped = line.strip()
-        if (
-            stripped.startswith("SKIP")
-            or stripped.startswith("\u2717")
-            or "FAILED" in stripped
-        ):
+        if stripped.startswith("\u2717") or "FAILED" in stripped:
+            return True
+    return False
+
+
+def _has_skips(output: str) -> bool:
+    """Check if captured test output contains any SKIP markers."""
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("SKIP"):
             return True
     return False
 
@@ -201,13 +206,16 @@ def main(modules: list[str] | None = None, *, verbose: bool = True) -> int:
             if result.error:
                 first = result.error.splitlines()[0]
                 print(f"        {first}")
-        elif _has_issues(result.output):
+        elif _has_failures(result.output):
+            print(f"  FAIL  {result.name}  ({ms:.1f} ms)")
+            _print_indented(result.output)
+        elif _has_skips(result.output):
             print(f"  ok?   {result.name}  ({ms:.1f} ms)")
             _print_indented(result.output)
         else:
             print(f"  ok    {result.name}  ({ms:.1f} ms)")
 
-    passed = sum(1 for r in results if r.passed)
+    passed = sum(1 for r in results if r.passed and not _has_failures(r.output))
     failed = len(results) - passed
     total_s = sum(r.duration_s for r in results)
 
