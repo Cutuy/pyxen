@@ -41,14 +41,7 @@ _SKIP_MODULES = frozenset({
     "pyxen.core.ext.cron.record",
 })
 
-# Examples that have a ``_main()`` test entry point.  Kept explicit because
-# importing example modules can have side effects (e.g. ``uvicorn.run()``).
-_EXAMPLE_MODULES: tuple[str, ...] = (
-    "examples.hello_runtime.main",
-    "examples.notes_app.app",
-    "examples.data_pipeline.pipeline",
-    "examples.cron_app.main",
-)
+
 
 
 def _has_main_ast(path: Path) -> bool:
@@ -64,11 +57,7 @@ def _has_main_ast(path: Path) -> bool:
 
 
 def _discover_modules() -> list[str]:
-    """Walk src/pyxen and yield every module that has ``def _main()``.
-
-    Only the ``pyxen.*`` namespace is scanned (safe to import). Example
-    modules are listed explicitly in ``_EXAMPLE_MODULES``.
-    """
+    """Walk src/pyxen and yield every module that has ``def _main()``."""
     src = project_root() / "src"
     modules: list[str] = []
 
@@ -183,8 +172,8 @@ def run_one(name: str) -> ModuleResult:
 
 
 def discover() -> list[str]:
-    """Return all known test module names."""
-    return _discover_modules() + list(_EXAMPLE_MODULES)
+    """Return all known test module names (pyxen.* modules with ``_main()``)."""
+    return _discover_modules()
 
 
 def main(modules: list[str] | None = None, *, verbose: bool = True) -> int:
