@@ -1,0 +1,34 @@
+{
+  "version": "1",
+  "identity": {
+    "implementation": "env",
+    "config": {}
+  },
+  "tokens": {
+    "implementation": "json_budget",
+    "config": { "path": "./budget.json", "daily_limit": 100000 }
+  },
+  "ipc": {
+    "implementation": "inproc",
+    "config": {}
+  },
+  "pkg": {
+    "implementation": "pip",
+    "config": {
+      "requirements": "requirements.txt",
+      "python": "python3"
+    }
+  },
+  "storage": {
+    "implementation": "inmemory",
+    "config": {}
+  },
+  "secrets": {
+    "implementation": "dotenv",
+    "config": { "path": "./.env" }
+  },
+  "observability": {
+    "implementation": "stdout",
+    "config": { "level": "info" }
+  }
+}

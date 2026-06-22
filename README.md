@@ -82,7 +82,7 @@ pyxen test        # run test suite
 
 ## Examples
 
-The `examples/` directory has 5 runnable apps. Each one shows the runtime doing a different job.
+The `examples/` directory has 6 runnable apps. Each one shows the runtime doing a different job.
 
 ### [`a2a_chat`](./examples/a2a_chat/README.md)
 
@@ -134,6 +134,17 @@ as an agent-containing one.
 pip install pyxen[examples]      # adds fastapi + uvicorn
 pyxen validate runtime.json
 uvicorn examples.notes_app.app:app --reload
+```
+
+### [`pkg_demo`](./examples/pkg_demo/README.md)
+
+The runtime.json declares ``pkg`` with the ``pip`` implementation,
+pointing to a ``requirements.txt``. On load, app code calls
+``rt.pkg.ensure()`` to install any missing PyPI packages, then
+imports and uses them normally.
+
+```bash
+python -m examples.pkg_demo.main
 ```
 
 
