@@ -47,7 +47,7 @@ pyxen doctor      # verify impls are importable
 | `observability` | Emit a trace / log | `file`, `null`, `openai_tracing`, `stdout` |
 | `pkg` | Dependencies present? | `dry_run`, `pip`, `uv` |
 | `secrets` | Get a credential | `dotenv`, `local_file` |
-| `storage` | Persist a record | `gcs`, `inmemory`, `local_fs_mount`, `local_sqlite`, `redis`, `router` |
+| `storage` | Persist a record | `bq`, `gcs`, `inmemory`, `local_fs_mount`, `local_sqlite`, `redis`, `router` |
 | `tokens` | Within LLM budget? | `json_budget`, `openai_usage` |
 
 ## Extensions

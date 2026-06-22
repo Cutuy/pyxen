@@ -301,9 +301,8 @@ def build(
 def _main() -> None:
     """Test entry point for bq storage impl.
 
-    Requires the ``PYXEN_BQ_TEST_PROJECT`` environment variable set and
-    the ``bq`` CLI tool on PATH. Creates a temporary dataset and table,
-    runs tests, then cleans up. No-op if prerequisites aren't met.
+    Requires ``PYXEN_BQ_TEST_PROJECT`` and ``bq`` on PATH. Creates a
+    temporary dataset+table, runs all ``_test_*`` functions, then cleans up.
     """
     import asyncio
     import secrets as _secrets_mod
@@ -318,143 +317,138 @@ def _main() -> None:
         print("bq: SKIP (PYXEN_BQ_TEST_PROJECT not set)")
         return
 
-    async def go() -> None:
-        suffix = _secrets_mod.token_hex(4)
-        dataset = f"pyxen_test_{suffix}"
-        table = "items"
+    suffix = _secrets_mod.token_hex(4)
+    dataset = f"pyxen_test_{suffix}"
+    table = "items"
 
-        env = dict(os.environ)
-        env["CLOUDSDK_CORE_PROJECT"] = project
+    env = dict(os.environ)
+    env["CLOUDSDK_CORE_PROJECT"] = project
 
-        def _run(
-            *args: str, input_data: str | None = None
-        ) -> subprocess.CompletedProcess[str]:
-            return subprocess.run(
-                [bq, *args],
-                input=input_data,
-                capture_output=True,
-                text=True,
-                env=env,
-                timeout=60,
-            )
-
-        # Create dataset
-        r = await asyncio.to_thread(
-            _run, "mk", "--dataset", f"{project}:{dataset}"
+    def _run(
+        *args: str, input_data: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [bq, *args],
+            input=input_data,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=60,
         )
-        if r.returncode != 0:
-            print(
-                "bq: SKIP "
-                f"(failed to create dataset: {r.stderr.strip()})"
-            )
-            return
 
-        # Create table
-        r = await asyncio.to_thread(
-            _run,
-            "mk",
-            "--table",
-            f"{project}:{dataset}.{table}",
-            "namespace:STRING,key:STRING,value:JSON",
-        )
-        if r.returncode != 0:
-            await asyncio.to_thread(
-                _run, "rm", "-f", "--dataset", f"{project}:{dataset}"
-            )
-            print(
-                "bq: SKIP "
-                f"(failed to create table: {r.stderr.strip()})"
-            )
-            return
+    # Create dataset
+    r = asyncio.run(asyncio.to_thread(
+        _run, "mk", "--dataset", f"{project}:{dataset}"
+    ))
+    if r.returncode != 0:
+        print(f"bq: SKIP (failed to create dataset: {r.stderr.strip()})")
+        return
 
-        try:
-            s = build(
-                {
-                    "project": project,
-                    "dataset": dataset,
-                    "table": table,
-                }
-            )
+    # Create table
+    r = asyncio.run(asyncio.to_thread(
+        _run, "mk", "--table", f"{project}:{dataset}.{table}",
+        "namespace:STRING,key:STRING,value:JSON",
+    ))
+    if r.returncode != 0:
+        asyncio.run(asyncio.to_thread(
+            _run, "rm", "-f", "--dataset", f"{project}:{dataset}"
+        ))
+        print(f"bq: SKIP (failed to create table: {r.stderr.strip()})")
+        return
 
-            # put then get
+    try:
+        s = build({"project": project, "dataset": dataset, "table": table})
+
+        async def test_put_get(s: BqStorage) -> None:
             await s.put("ns", "k", {"v": 1, "name": "alice"})
             got = await s.get("ns", "k")
-            assert got == {
-                "v": 1,
-                "name": "alice",
-            }, f"expected {{'v': 1, 'name': 'alice'}}, got {got}"
+            assert got == {"v": 1, "name": "alice"}, f"got {got}"
 
-            # put overwrites
+        async def test_overwrite(s: BqStorage) -> None:
             await s.put("ns", "k", {"v": 2})
             assert await s.get("ns", "k") == {"v": 2}
 
-            # get missing returns None
+        async def test_missing(s: BqStorage) -> None:
             assert await s.get("ns", "missing") is None
             assert await s.get("nonexistent", "k") is None
 
-            # put with empty dict
+        async def test_empty_value(s: BqStorage) -> None:
             await s.put("ns", "empty", {})
             assert await s.get("ns", "empty") == {}
 
-            # put with nested values
-            await s.put(
-                "ns", "nested", {"a": {"b": {"c": [1, 2, 3]}}}
-            )
-            assert await s.get("ns", "nested") == {
-                "a": {"b": {"c": [1, 2, 3]}}
-            }
+        async def test_nested(s: BqStorage) -> None:
+            await s.put("ns", "nested", {"a": {"b": {"c": [1, 2, 3]}}})
+            assert await s.get("ns", "nested") == {"a": {"b": {"c": [1, 2, 3]}}}
 
-            # multiple keys
-            await s.put("ns", "a", {"v": 1})
-            await s.put("ns", "b", {"v": 2})
-            await s.put("ns", "c", {"v": 3})
-            all_in_ns = await s.query("ns")
-            assert len(all_in_ns) >= 5
+        async def test_query_all(s: BqStorage) -> None:
+            await s.put("ns", "qa", {"v": 1})
+            await s.put("ns", "qb", {"v": 2})
+            await s.put("ns", "qc", {"v": 3})
+            results = await s.query("ns")
+            assert len(results) >= 3
 
-            # query with filter
+        async def test_query_filter(s: BqStorage) -> None:
             await s.put("ns", "x1", {"tag": "red", "n": 1})
             await s.put("ns", "x2", {"tag": "red", "n": 2})
             await s.put("ns", "x3", {"tag": "blue", "n": 3})
-
-            import time
-
-            time.sleep(2)
-
-            red = await s.query(
-                "ns", QueryFilter(equals={"tag": "red"})
-            )
+            red = await s.query("ns", QueryFilter(equals={"tag": "red"}))
             assert all(r["tag"] == "red" for r in red)
             assert len(red) == 2
 
-            # query with limit
+        async def test_query_limit(s: BqStorage) -> None:
             first_two = await s.query("ns", QueryFilter(limit=2))
             assert len(first_two) == 2
 
-            # cross-namespace isolation
+        async def test_namespace_isolation(s: BqStorage) -> None:
             await s.put("other", "k", {"v": 99})
             other = await s.query("other")
             assert len(other) == 1
             assert other[0]["v"] == 99
 
-            # delete existing returns True
-            assert await s.delete("ns", "a") is True
-            assert await s.get("ns", "a") is None
+        async def test_delete_existing(s: BqStorage) -> None:
+            assert await s.delete("ns", "qa") is True
+            assert await s.get("ns", "qa") is None
 
-            # delete missing returns False
+        async def test_delete_missing(s: BqStorage) -> None:
             assert await s.delete("ns", "missing_xyz") is False
             assert await s.delete("nonexistent", "k") is False
 
-            print("bq: OK")
-        finally:
-            # Cleanup dataset
-            await asyncio.to_thread(
-                _run, "rm", "-f", "--dataset", f"{project}:{dataset}"
-            )
+        async def _run_tests() -> None:
+            passed = 0
+            failed = 0
+            cases: list[tuple[str, object]] = [
+                ("put/get", test_put_get(s)),
+                ("overwrite", test_overwrite(s)),
+                ("missing returns None", test_missing(s)),
+                ("empty value", test_empty_value(s)),
+                ("nested values", test_nested(s)),
+                ("query all", test_query_all(s)),
+                ("query filter", test_query_filter(s)),
+                ("query limit", test_query_limit(s)),
+                ("namespace isolation", test_namespace_isolation(s)),
+                ("delete existing", test_delete_existing(s)),
+                ("delete missing", test_delete_missing(s)),
+            ]
+            for name, coro in cases:
+                try:
+                    await coro  # type: ignore[arg-type]
+                    passed += 1
+                    print(f"  ✓ {name}")
+                except Exception as e:
+                    failed += 1
+                    print(f"  ✗ {name}: {e}")
+            if failed:
+                print(f"bq: {passed} passed, {failed} FAILED")
+            else:
+                print(f"bq: {passed} passed — OK")
 
-    try:
-        asyncio.run(go())
+        asyncio.run(_run_tests())
     except Exception as exc:
         print(f"bq: SKIP ({exc})")
+    finally:
+        asyncio.run(asyncio.to_thread(
+            _run, "rm", "-f", "--dataset", f"{project}:{dataset}"
+        ))
 
 
 if __name__ == "__main__":
