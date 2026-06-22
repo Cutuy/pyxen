@@ -26,6 +26,9 @@ from typing import NamedTuple
 MODULES: tuple[str, ...] = (
     # core
     "pyxen.core.identity",
+    "pyxen.core.cron.errors",
+    "pyxen.core.cron.models",
+    "pyxen.core.cron.scheduler",
     "pyxen.core.tokens",
     "pyxen.core.ipc",
     "pyxen.core.pkg",
@@ -66,6 +69,7 @@ MODULES: tuple[str, ...] = (
     "examples.hello_runtime.main",
     "examples.notes_app.app",
     "examples.data_pipeline.pipeline",
+    "examples.cron_app.main",
 )
 
 
@@ -76,6 +80,7 @@ _EXAMPLE_MODULES = {
     "examples.hello_runtime.main",
     "examples.notes_app.app",
     "examples.data_pipeline.pipeline",
+    "examples.cron_app.main",
 }
 
 

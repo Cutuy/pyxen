@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "identity": {
+    "implementation": "env",
+    "config": {}
+  },
+  "storage": {
+    "implementation": "inmemory",
+    "config": {}
+  },
+  "observability": {
+    "implementation": "null",
+    "config": {}
+  },
+  "cron": {
+    "on_duplicate": "replace",
+    "jobs": [
+      {
+        "name": "pyxen-example-heartbeat",
+        "command": "echo \"$(date -u -Iseconds) pyxen-cron-app heartbeat ok\" >> /tmp/pyxen-heartbeat.log",
+        "schedule": "*/5 * * * *"
+      },
+      {
+        "name": "pyxen-example-cleanup",
+        "command": "find /tmp -name 'pyxen-heartbeat-*' -mmin +60 -delete 2>/dev/null; echo \"$(date -u -Iseconds) cleanup done\" >> /tmp/pyxen-heartbeat.log",
+        "schedule": "0 * * * *"
+      }
+    ]
+  }
+}

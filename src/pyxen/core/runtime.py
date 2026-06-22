@@ -64,6 +64,9 @@ class Runtime:
         for primitive, binding in manifest.bindings.items():
             impl = await cls._instantiate(primitive, binding.implementation, binding.config)
             rt._impls[primitive] = impl
+
+        await _schedule_cron_jobs(manifest)
+
         return rt
 
     @staticmethod
@@ -105,6 +108,30 @@ class Runtime:
                 f"declare it in runtime.json or check the name"
             )
         return impl
+
+
+async def _schedule_cron_jobs(manifest: Manifest) -> None:
+    if not manifest.cron_jobs:
+        return
+
+    from .cron.errors import CronBackendError
+    from .cron.scheduler import CronScheduler
+
+    try:
+        scheduler = CronScheduler()
+    except CronBackendError:
+        return
+
+    for job in manifest.cron_jobs:
+        existing = await scheduler.status(job.name)
+        if existing is not None:
+            if manifest.cron_on_duplicate == "fail":
+                raise CronBackendError(
+                    f"cron job '{job.name}' already exists; "
+                    "set cron.on_duplicate to 'replace' to overwrite"
+                )
+            await scheduler.unschedule(job.name)
+        await scheduler.schedule(job)
 
 
 def _main() -> None:
@@ -292,6 +319,11 @@ def _main() -> None:
             import contextlib
             with contextlib.suppress(AttributeError):
                 _ = rt_min.__dict__  # private, raises
+
+        # --- Cron auto-scheduling: survives missing backend ---
+        from .manifest import parse_manifest
+        await _schedule_cron_jobs(parse_manifest({"version": "1"}))
+        await _schedule_cron_jobs(parse_manifest({"version": "1", "cron": {"jobs": []}}))
 
     asyncio.run(run_tests())
 

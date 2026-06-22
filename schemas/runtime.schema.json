@@ -18,7 +18,53 @@
     "pkg":             { "$ref": "#/$defs/primitive" },
     "storage":         { "$ref": "#/$defs/primitive" },
     "secrets":         { "$ref": "#/$defs/primitive" },
-    "observability":   { "$ref": "#/$defs/primitive" }
+    "observability":   { "$ref": "#/$defs/primitive" },
+    "cron": {
+      "type": "object",
+      "properties": {
+        "on_duplicate": {
+          "type": "string",
+          "enum": ["replace", "fail"],
+          "description": "Behavior when a job name already exists. 'replace' overwrites (default), 'fail' raises an error.",
+          "default": "replace"
+        },
+        "jobs": {
+          "type": "array",
+          "description": "Cron jobs to auto-schedule on runtime load.",
+          "items": {
+            "type": "object",
+            "required": ["name", "command", "schedule"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Unique job name."
+              },
+              "command": {
+                "type": "string",
+                "description": "Command or script to execute."
+              },
+              "schedule": {
+                "type": "string",
+                "description": "Cron expression (5-field or @-shorthand)."
+              },
+              "enabled": {
+                "type": "boolean",
+                "description": "Whether the job is enabled on startup.",
+                "default": true
+              },
+              "environment": {
+                "type": "object",
+                "description": "Environment variables for the job.",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   },
   "$defs": {
     "primitive": {
