@@ -14,6 +14,7 @@ import importlib
 from pathlib import Path
 from typing import Any
 
+from .cron.models import CronJob
 from .errors import ImplementationNotFoundError
 from .manifest import Manifest, load_manifest
 
@@ -65,7 +66,7 @@ class Runtime:
             impl = await cls._instantiate(primitive, binding.implementation, binding.config)
             rt._impls[primitive] = impl
 
-        await _schedule_cron_jobs(manifest)
+        await _schedule_cron_jobs(manifest, Path(path).resolve().parent)
 
         return rt
 
@@ -110,7 +111,7 @@ class Runtime:
         return impl
 
 
-async def _schedule_cron_jobs(manifest: Manifest) -> None:
+async def _schedule_cron_jobs(manifest: Manifest, app_dir: Path | None = None) -> None:
     if not manifest.cron_jobs:
         return
 
@@ -123,15 +124,26 @@ async def _schedule_cron_jobs(manifest: Manifest) -> None:
         return
 
     for job in manifest.cron_jobs:
-        existing = await scheduler.status(job.name)
+        resolved = _resolve_cron_command(job, app_dir)
+        existing = await scheduler.status(resolved.name)
         if existing is not None:
             if manifest.cron_on_duplicate == "fail":
                 raise CronBackendError(
-                    f"cron job '{job.name}' already exists; "
+                    f"cron job '{resolved.name}' already exists; "
                     "set cron.on_duplicate to 'replace' to overwrite"
                 )
-            await scheduler.unschedule(job.name)
-        await scheduler.schedule(job)
+            await scheduler.unschedule(resolved.name)
+        await scheduler.schedule(resolved)
+
+
+def _resolve_cron_command(job: CronJob, app_dir: Path | None) -> CronJob:
+    if app_dir is None or "{APP_DIR}" not in job.command:
+        return job
+    resolved = job.command.replace("{APP_DIR}", str(app_dir))
+    return CronJob(
+        name=job.name, command=resolved, schedule=job.schedule,
+        enabled=job.enabled, environment=job.environment,
+    )
 
 
 def _main() -> None:
@@ -324,6 +336,17 @@ def _main() -> None:
         from .manifest import parse_manifest
         await _schedule_cron_jobs(parse_manifest({"version": "1"}))
         await _schedule_cron_jobs(parse_manifest({"version": "1", "cron": {"jobs": []}}))
+
+        # --- _resolve_cron_command replaces {APP_DIR} ---
+        src_dir = Path(__file__).resolve().parent
+        job_in = CronJob(name="t", command="bash {APP_DIR}/scripts/t.sh", schedule="* * * * *")
+        job_out = _resolve_cron_command(job_in, src_dir)
+        assert "{APP_DIR}" not in job_out.command
+        assert str(src_dir) in job_out.command
+        assert job_out.command == f"bash {src_dir}/scripts/t.sh"
+        # No-op when no {APP_DIR}
+        same = _resolve_cron_command(job_in, None)
+        assert same.command == job_in.command
 
     asyncio.run(run_tests())
 

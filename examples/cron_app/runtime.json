@@ -17,7 +17,7 @@
     "jobs": [
       {
         "name": "pyxen-example-heartbeat",
-        "command": "echo \"$(date -u -Iseconds) pyxen-cron-app heartbeat ok\" >> /tmp/pyxen-heartbeat.log",
+        "command": "bash {APP_DIR}/scripts/heartbeat.sh",
         "schedule": "*/5 * * * *"
       },
       {
