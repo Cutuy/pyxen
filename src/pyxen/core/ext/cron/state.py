@@ -126,37 +126,59 @@ def _fmt_ts(ts: float) -> str:
 
 
 def _main() -> None:
+    from pyxen._testlib import run_tests
     import tempfile
+    from pathlib import Path
 
-    with tempfile.TemporaryDirectory() as tmp:
-        p = Path(tmp) / "cron-state.jsonl"
-        store = CronStateStore(p)
+    def test_empty_store_returns_none() -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "cron-state.jsonl"
+            store = CronStateStore(p)
+            s = store.status("backup")
+            assert s is None, "empty store should return None"
 
-        s = store.status("backup")
-        assert s is None, "empty store should return None"
+    def test_record_start_end() -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "cron-state.jsonl"
+            store = CronStateStore(p)
+            store.record_start("backup")
+            store.record_end("backup", 0)
+            store.record_start("heartbeat")
+            store.record_end("heartbeat", 1)
 
-        store.record_start("backup")
-        store.record_end("backup", 0)
-        store.record_start("heartbeat")
-        store.record_end("heartbeat", 1)
+            s = store.status("backup")
+            assert s is not None
+            assert s.last_result == "0"
 
-        s = store.status("backup")
-        assert s is not None
-        assert s.last_result == "0"
+            s2 = store.status("heartbeat")
+            assert s2 is not None
+            assert s2.last_result == "1"
 
-        s2 = store.status("heartbeat")
-        assert s2 is not None
-        assert s2.last_result == "1"
+    def test_history() -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "cron-state.jsonl"
+            store = CronStateStore(p)
+            store.record_start("backup")
+            store.record_end("backup", 0)
+            hist = store.history("backup")
+            assert len(hist) == 2
 
-        hist = store.history("backup")
-        assert len(hist) == 2
+    def test_active_status() -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "cron-state.jsonl"
+            store = CronStateStore(p)
+            store.record_start("longjob")
+            s3 = store.status("longjob")
+            assert s3 is not None
+            assert s3.active is True
+            assert s3.last_result is None
 
-        # Active status (started but no end yet)
-        store.record_start("longjob")
-        s3 = store.status("longjob")
-        assert s3 is not None
-        assert s3.active is True
-        assert s3.last_result is None
+    run_tests(
+        test_empty_store_returns_none,
+        test_record_start_end,
+        test_history,
+        test_active_status,
+    )
 
 
 if __name__ == "__main__":

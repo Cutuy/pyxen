@@ -24,14 +24,20 @@ class SecretsImpl(Protocol):
 
 
 def _main() -> None:
-    """Test entry point for this module.
+    from pyxen._testlib import run_tests
 
-    ``SecretsImpl`` is a Protocol. Concrete tests live in ``impl/secrets/*.py``.
-    """
-    assert hasattr(SecretsImpl, "get")
-    assert hasattr(SecretsImpl, "set")
-    bases_names = {getattr(b, "__name__", "") for b in SecretsImpl.__bases__}
-    assert "Protocol" in bases_names or hasattr(SecretsImpl, "_is_protocol")
+    def test_secretsimpl_has_get_and_set() -> None:
+        assert hasattr(SecretsImpl, "get")
+        assert hasattr(SecretsImpl, "set")
+
+    def test_secretsimpl_is_protocol() -> None:
+        bases_names = {getattr(b, "__name__", "") for b in SecretsImpl.__bases__}
+        assert "Protocol" in bases_names or hasattr(SecretsImpl, "_is_protocol")
+
+    run_tests(
+        test_secretsimpl_has_get_and_set,
+        test_secretsimpl_is_protocol,
+    )
 
 
 if __name__ == "__main__":

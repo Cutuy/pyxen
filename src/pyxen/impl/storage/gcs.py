@@ -44,7 +44,7 @@ try:
 except ImportError:
     _HAS_GCS = False
 
-from ..._testlib import ok, skip
+
 from ...core.errors import StorageError
 from ...core.storage import QueryFilter
 
@@ -197,6 +197,7 @@ def _main() -> None:
     a real GCS bucket name that the caller can write to.
     """
     import asyncio
+    from pyxen._testlib import arun_tests, skip
 
     bucket = os.environ.get("PYXEN_GCS_TEST_BUCKET")
     if not bucket:
@@ -209,77 +210,91 @@ def _main() -> None:
 
     from pyxen.core.storage import QueryFilter
 
-    async def go() -> None:
+    async def _run_tests() -> None:
         prefix = f"pyxen-test-{os.urandom(4).hex()}/"
         s = build({"bucket": bucket, "prefix": prefix})
 
-        # put then get
-        await s.put("ns", "k", {"v": 1, "name": "alice"})
-        assert await s.get("ns", "k") == {"v": 1, "name": "alice"}
+        async def test_put_get() -> None:
+            await s.put("ns", "k", {"v": 1, "name": "alice"})
+            assert await s.get("ns", "k") == {"v": 1, "name": "alice"}
 
-        # put overwrites
-        await s.put("ns", "k", {"v": 2})
-        assert await s.get("ns", "k") == {"v": 2}
+        async def test_overwrite() -> None:
+            await s.put("ns", "k", {"v": 2})
+            assert await s.get("ns", "k") == {"v": 2}
 
-        # get missing returns None
-        assert await s.get("ns", "missing") is None
-        assert await s.get("nonexistent", "k") is None
+        async def test_missing() -> None:
+            assert await s.get("ns", "missing") is None
+            assert await s.get("nonexistent", "k") is None
 
-        # put with empty dict
-        await s.put("ns", "empty", {})
-        assert await s.get("ns", "empty") == {}
+        async def test_empty_value() -> None:
+            await s.put("ns", "empty", {})
+            assert await s.get("ns", "empty") == {}
 
-        # put with nested values (json round-trip)
-        await s.put("ns", "nested", {"a": {"b": {"c": [1, 2, 3]}}})
-        assert await s.get("ns", "nested") == {"a": {"b": {"c": [1, 2, 3]}}}
+        async def test_nested_values() -> None:
+            await s.put("ns", "nested", {"a": {"b": {"c": [1, 2, 3]}}})
+            assert await s.get("ns", "nested") == {"a": {"b": {"c": [1, 2, 3]}}}
 
-        # multiple keys
-        await s.put("ns", "a", {"v": 1})
-        await s.put("ns", "b", {"v": 2})
-        await s.put("ns", "c", {"v": 3})
-        all_in_ns = await s.query("ns")
-        assert len(all_in_ns) >= 3
+        async def test_query_all() -> None:
+            await s.put("ns", "a", {"v": 1})
+            await s.put("ns", "b", {"v": 2})
+            await s.put("ns", "c", {"v": 3})
+            all_in_ns = await s.query("ns")
+            assert len(all_in_ns) >= 3
 
-        # query with filter
-        await s.put("ns", "x1", {"tag": "red", "n": 1})
-        await s.put("ns", "x2", {"tag": "red", "n": 2})
-        await s.put("ns", "x3", {"tag": "blue", "n": 3})
-        red = await s.query("ns", QueryFilter(equals={"tag": "red"}))
-        assert all(r["tag"] == "red" for r in red)
-        assert len(red) == 2
+        async def test_query_filter() -> None:
+            await s.put("ns", "x1", {"tag": "red", "n": 1})
+            await s.put("ns", "x2", {"tag": "red", "n": 2})
+            await s.put("ns", "x3", {"tag": "blue", "n": 3})
+            red = await s.query("ns", QueryFilter(equals={"tag": "red"}))
+            assert all(r["tag"] == "red" for r in red)
+            assert len(red) == 2
 
-        # query with limit
-        first_three = await s.query("ns", QueryFilter(limit=3))
-        assert len(first_three) == 3
+        async def test_query_limit() -> None:
+            first_three = await s.query("ns", QueryFilter(limit=3))
+            assert len(first_three) == 3
 
-        # query with combined filter + limit
-        first_red = await s.query("ns", QueryFilter(equals={"tag": "red"}, limit=1))
-        assert len(first_red) == 1
+        async def test_query_filter_limit() -> None:
+            first_red = await s.query("ns", QueryFilter(equals={"tag": "red"}, limit=1))
+            assert len(first_red) == 1
 
-        # cross-namespace isolation
-        await s.put("other", "k", {"v": 99})
-        other = await s.query("other")
-        assert len(other) == 1
-        assert other[0]["v"] == 99
+        async def test_namespace_isolation() -> None:
+            await s.put("other", "k", {"v": 99})
+            other = await s.query("other")
+            assert len(other) == 1
+            assert other[0]["v"] == 99
 
-        # delete existing returns True
-        assert await s.delete("ns", "a") is True
-        assert await s.get("ns", "a") is None
+        async def test_delete_existing() -> None:
+            assert await s.delete("ns", "a") is True
+            assert await s.get("ns", "a") is None
 
-        # delete missing returns False
-        assert await s.delete("ns", "missing_xyz") is False
-        assert await s.delete("nonexistent", "k") is False
+        async def test_delete_missing() -> None:
+            assert await s.delete("ns", "missing_xyz") is False
+            assert await s.delete("nonexistent", "k") is False
 
-        # cleanup test blobs
-        s._ensure_client()
-        for ns in ("ns", "other"):
-            for blob in s._client.list_blobs(bucket, prefix=f"{prefix}{ns}/"):  # type: ignore[union-attr]
-                blob.delete()
-
-        ok("gcs")
+        try:
+            await arun_tests(
+                test_put_get,
+                test_overwrite,
+                test_missing,
+                test_empty_value,
+                test_nested_values,
+                test_query_all,
+                test_query_filter,
+                test_query_limit,
+                test_query_filter_limit,
+                test_namespace_isolation,
+                test_delete_existing,
+                test_delete_missing,
+                label="gcs",
+            )
+        finally:
+            s._ensure_client()
+            for ns in ("ns", "other"):
+                for blob in s._client.list_blobs(bucket, prefix=f"{prefix}{ns}/"):  # type: ignore[union-attr]
+                    blob.delete()
 
     try:
-        asyncio.run(go())
+        asyncio.run(_run_tests())
     except Exception as exc:
         skip(f"{exc}")
 

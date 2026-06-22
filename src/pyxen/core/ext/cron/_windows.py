@@ -147,47 +147,72 @@ def _cron_to_schtasks(expr: str) -> tuple[str, dict[str, object]]:
 
 
 def _main() -> None:
-    job = CronJob(name="test", command="echo hi", schedule="@daily")
-    args = _build_schtasks_args(job)
-    assert "/tn" in args
-    assert "pyxen.test" in args
-    assert "/sc" in args
-    assert "DAILY" in args
+    from pyxen._testlib import run_tests
 
-    job2 = CronJob(name="test", command="echo hi", schedule="@reboot")
-    args2 = _build_schtasks_args(job2)
-    assert "ONSTART" in args2
+    def test_build_schtasks_args_daily() -> None:
+        job = CronJob(name="test", command="echo hi", schedule="@daily")
+        args = _build_schtasks_args(job)
+        assert "/tn" in args
+        assert "pyxen.test" in args
+        assert "/sc" in args
+        assert "DAILY" in args
 
-    sc, mods = _cron_to_schtasks("30 4 * * *")
-    assert sc == "DAILY"
-    assert mods.get("st") == "04:30"
+    def test_build_schtasks_args_reboot() -> None:
+        job2 = CronJob(name="test", command="echo hi", schedule="@reboot")
+        args2 = _build_schtasks_args(job2)
+        assert "ONSTART" in args2
 
-    sc2, mods2 = _cron_to_schtasks("@hourly")
-    assert sc2 == "HOURLY"
+    def test_cron_to_schtasks_daily() -> None:
+        sc, mods = _cron_to_schtasks("30 4 * * *")
+        assert sc == "DAILY"
+        assert mods.get("st") == "04:30"
 
-    sc3, mods3 = _cron_to_schtasks("0 9 * * 1")
-    assert sc3 == "WEEKLY"
-    assert mods3.get("d") == "MON"
-    assert mods3.get("st") == "09:00"
+    def test_cron_to_schtasks_hourly() -> None:
+        sc2, mods2 = _cron_to_schtasks("@hourly")
+        assert sc2 == "HOURLY"
 
-    sc4, mods4 = _cron_to_schtasks("*/10 * * * *")
-    assert sc4 == "HOURLY"
+    def test_cron_to_schtasks_weekly() -> None:
+        sc3, mods3 = _cron_to_schtasks("0 9 * * 1")
+        assert sc3 == "WEEKLY"
+        assert mods3.get("d") == "MON"
+        assert mods3.get("st") == "09:00"
 
-    sc5, mods5 = _cron_to_schtasks("0 * * * *")
-    assert sc5 == "HOURLY"
+    def test_cron_to_schtasks_hourly_step() -> None:
+        sc4, mods4 = _cron_to_schtasks("*/10 * * * *")
+        assert sc4 == "HOURLY"
 
-    sc6, mods6 = _cron_to_schtasks("@weekly")
-    assert sc6 == "WEEKLY"
+    def test_cron_to_schtasks_zero_hour() -> None:
+        sc5, mods5 = _cron_to_schtasks("0 * * * *")
+        assert sc5 == "HOURLY"
 
-    try:
-        _cron_to_schtasks("bad")
-    except CronScheduleError:
-        pass
-    else:
-        raise AssertionError("expected CronScheduleError")
+    def test_cron_to_schtasks_weekly_shorthand() -> None:
+        sc6, mods6 = _cron_to_schtasks("@weekly")
+        assert sc6 == "WEEKLY"
 
-    result = probe()
-    assert isinstance(result, bool)
+    def test_cron_to_schtasks_bad_expression() -> None:
+        try:
+            _cron_to_schtasks("bad")
+        except CronScheduleError:
+            pass
+        else:
+            raise AssertionError("expected CronScheduleError")
+
+    def test_probe_return_type() -> None:
+        result = probe()
+        assert isinstance(result, bool)
+
+    run_tests(
+        test_build_schtasks_args_daily,
+        test_build_schtasks_args_reboot,
+        test_cron_to_schtasks_daily,
+        test_cron_to_schtasks_hourly,
+        test_cron_to_schtasks_weekly,
+        test_cron_to_schtasks_hourly_step,
+        test_cron_to_schtasks_zero_hour,
+        test_cron_to_schtasks_weekly_shorthand,
+        test_cron_to_schtasks_bad_expression,
+        test_probe_return_type,
+    )
 
 
 if __name__ == "__main__":

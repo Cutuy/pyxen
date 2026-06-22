@@ -41,28 +41,38 @@ class IpcImpl(Protocol):
 
 
 def _main() -> None:
-    """Test entry point for this module."""
-    # --- Message dataclass ---
-    m = Message(target="agent-a", payload={"type": "ping"})
-    assert m.target == "agent-a"
-    assert m.payload == {"type": "ping"}
-    assert m.correlation_id is None
+    from pyxen._testlib import run_tests
 
-    m2 = Message(target="agent-b", payload={"x": 1}, correlation_id="abc-123")
-    assert m2.correlation_id == "abc-123"
-    assert m2.payload == {"x": 1}
+    def test_message_required_fields() -> None:
+        m = Message(target="agent-a", payload={"type": "ping"})
+        assert m.target == "agent-a"
+        assert m.payload == {"type": "ping"}
+        assert m.correlation_id is None
 
-    # Message with empty payload
-    m3 = Message(target="t", payload={})
-    assert m3.payload == {}
+    def test_message_with_correlation_id() -> None:
+        m2 = Message(target="agent-b", payload={"x": 1}, correlation_id="abc-123")
+        assert m2.correlation_id == "abc-123"
+        assert m2.payload == {"x": 1}
 
-    # Message is frozen
-    try:
-        m.target = "mutate"  # type: ignore[misc]
-    except Exception:  # noqa: BLE001
-        pass
-    else:
-        raise AssertionError("Message should be frozen")
+    def test_message_empty_payload() -> None:
+        m3 = Message(target="t", payload={})
+        assert m3.payload == {}
+
+    def test_message_frozen() -> None:
+        m = Message(target="agent-a", payload={"type": "ping"})
+        try:
+            m.target = "mutate"  # type: ignore[misc]
+        except Exception:  # noqa: BLE001
+            pass
+        else:
+            raise AssertionError("Message should be frozen")
+
+    run_tests(
+        test_message_required_fields,
+        test_message_with_correlation_id,
+        test_message_empty_payload,
+        test_message_frozen,
+    )
 
 
 if __name__ == "__main__":

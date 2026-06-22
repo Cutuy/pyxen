@@ -169,155 +169,115 @@ def _main() -> None:
     from pathlib import Path
 
     from .errors import ImplementationNotFoundError, ManifestError
+    from pyxen._testlib import arun_tests
 
-    async def run_tests() -> None:
-        # --- Full manifest: all 7 primitives, in-memory local impls ---
-        with tempfile.TemporaryDirectory() as tmp:
-            manifest = {
-                "version": "1",
-                "identity": {"implementation": "env", "config": {}},
-                "tokens": {"implementation": "json_budget", "config": {"path": str(Path(tmp) / "b.json")}},
-                "ipc": {"implementation": "inproc", "config": {}},
-                "pkg": {"implementation": "dry_run", "config": {}},
-                "storage": {"implementation": "inmemory", "config": {}},
-                "secrets": {"implementation": "dotenv", "config": {"path": str(Path(tmp) / ".env")}},
-                "observability": {"implementation": "null", "config": {}},
-            }
-            f = Path(tmp) / "runtime.json"
-            f.write_text(json.dumps(manifest))
+    async def _run_tests() -> None:
 
-            rt = await Runtime.load(f)
+        async def test_full_manifest() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                manifest = {
+                    "version": "1",
+                    "identity": {"implementation": "env", "config": {}},
+                    "tokens": {"implementation": "json_budget", "config": {"path": str(Path(tmp) / "b.json")}},
+                    "ipc": {"implementation": "inproc", "config": {}},
+                    "pkg": {"implementation": "dry_run", "config": {}},
+                    "storage": {"implementation": "inmemory", "config": {}},
+                    "secrets": {"implementation": "dotenv", "config": {"path": str(Path(tmp) / ".env")}},
+                    "observability": {"implementation": "null", "config": {}},
+                }
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps(manifest))
+                rt = await Runtime.load(f)
+                assert rt.identity is not None
+                assert rt.tokens is not None
+                assert rt.ipc is not None
+                assert rt.pkg is not None
+                assert rt.storage is not None
+                assert rt.secrets is not None
+                assert rt.observability is not None
+                me = await rt.identity.current()
+                assert me.id == "anonymous"
+                assert me.source == "env"
+                await rt.storage.put("ns", "k", {"v": 1, "x": "y"})
+                assert await rt.storage.get("ns", "k") == {"v": 1, "x": "y"}
+                assert await rt.storage.get("ns", "missing") is None
+                await rt.storage.put("other", "k", {"v": 2})
+                assert await rt.storage.get("ns", "k") == {"v": 1, "x": "y"}
+                assert await rt.storage.get("other", "k") == {"v": 2}
+                check = await rt.tokens.check("gpt-4o", 1000)
+                assert check.allowed is True
+                assert check.remaining >= 0
+                async with rt.observability.trace("test") as span:
+                    span.set_attribute("k", "v")
+                    span.log("info", "msg", extra=42)
+                assert rt.manifest.version == "1"
+                assert len(rt.manifest.bindings) == 7
 
-            # All 7 primitives resolved
-            assert rt.identity is not None
-            assert rt.tokens is not None
-            assert rt.ipc is not None
-            assert rt.pkg is not None
-            assert rt.storage is not None
-            assert rt.secrets is not None
-            assert rt.observability is not None
-
-            # Identity works
-            me = await rt.identity.current()
-            assert me.id == "anonymous"  # PYXEN_IDENTITY_ID unset in test env
-            assert me.source == "env"
-
-            # Storage works (put then get)
-            await rt.storage.put("ns", "k", {"v": 1, "x": "y"})
-            got = await rt.storage.get("ns", "k")
-            assert got == {"v": 1, "x": "y"}
-
-            # Storage get on missing key returns None
-            assert await rt.storage.get("ns", "missing") is None
-
-            # Storage namespace isolation
-            await rt.storage.put("other", "k", {"v": 2})
-            assert await rt.storage.get("ns", "k") == {"v": 1, "x": "y"}
-            assert await rt.storage.get("other", "k") == {"v": 2}
-
-            # Tokens check
-            check = await rt.tokens.check("gpt-4o", 1000)
-            assert check.allowed is True
-            assert check.remaining >= 0
-
-            # Observability span context manager
-            async with rt.observability.trace("test") as span:
-                span.set_attribute("k", "v")
-                span.log("info", "msg", extra=42)
-
-            # Manifest is exposed
-            assert rt.manifest.version == "1"
-            assert len(rt.manifest.bindings) == 7
-
-        # --- Partial manifest: only some primitives declared ---
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "runtime.json"
-            f.write_text(
-                json.dumps({"version": "1", "storage": {"implementation": "inmemory", "config": {}}})
-            )
-            rt_partial = await Runtime.load(f)
-            assert rt_partial.storage is not None
-            # Undeclared primitives raise AttributeError on access
-            try:
-                _ = rt_partial.identity
-            except AttributeError as e:
-                assert "identity" in str(e)
-            else:
-                raise AssertionError("undeclared primitive should raise AttributeError")
-
-        # --- Unknown primitive in manifest is silently ignored ---
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "runtime.json"
-            f.write_text(
-                json.dumps(
-                    {
-                        "version": "1",
-                        "totally_made_up": {"implementation": "x", "config": {}},
-                    }
-                )
-            )
-            # Should NOT raise — unknown primitives are tolerated
-            rt_unknown = await Runtime.load(f)
-            assert rt_unknown is not None
-
-        # --- Unknown implementation module raises ImplementationNotFoundError ---
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "runtime.json"
-            f.write_text(
-                json.dumps(
-                    {
-                        "version": "1",
-                        "storage": {"implementation": "definitely_not_a_real_impl", "config": {}},
-                    }
-                )
-            )
-            try:
-                await Runtime.load(f)
-            except ImplementationNotFoundError as e:
-                assert "definitely_not_a_real_impl" in str(e)
-            else:
-                raise AssertionError("should have raised ImplementationNotFoundError")
-
-        # --- Malformed manifest raises ManifestError ---
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "runtime.json"
-            f.write_text("{ bad json")
-            try:
-                await Runtime.load(f)
-            except ManifestError:
-                pass
-            else:
-                raise AssertionError("malformed JSON should raise ManifestError")
-
-        # --- Manifest with pkg dry_run and custom config ---
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "runtime.json"
-            f.write_text(json.dumps({
-                "version": "1",
-                "pkg": {"implementation": "dry_run", "config": {"extra": "data"}},
-            }))
-            rt_pkg = await Runtime.load(f)
-            assert rt_pkg.pkg is not None
-            await rt_pkg.pkg.ensure_python(["requests>=2.0"])
-            with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tf:
-                tf.write(b"requests\n")
-                tf_path = tf.name
-            try:
-                await rt_pkg.pkg.ensure_from_manifest(tf_path)
-            finally:
-                Path(tf_path).unlink()
-            # ensure_from_manifest on missing file is a no-op
-            await rt_pkg.pkg.ensure_from_manifest("/nonexistent/pyproject.toml")
-
-        # --- Manifest with pkg pip (requires pip on PATH) ---
-        import shutil as _shutil2
-        if _shutil2.which("pip"):
+        async def test_partial_manifest() -> None:
             with tempfile.TemporaryDirectory() as tmp:
                 f = Path(tmp) / "runtime.json"
-                f.write_text(json.dumps({
-                    "version": "1",
-                    "pkg": {"implementation": "pip", "config": {}},
-                }))
+                f.write_text(json.dumps({"version": "1", "storage": {"implementation": "inmemory", "config": {}}}))
+                rt_partial = await Runtime.load(f)
+                assert rt_partial.storage is not None
+                try:
+                    _ = rt_partial.identity
+                except AttributeError as e:
+                    assert "identity" in str(e)
+                else:
+                    raise AssertionError("undeclared primitive should raise AttributeError")
+
+        async def test_unknown_primitive_ignored() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps({"version": "1", "totally_made_up": {"implementation": "x", "config": {}}}))
+                rt_unknown = await Runtime.load(f)
+                assert rt_unknown is not None
+
+        async def test_unknown_impl_raises() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps({"version": "1", "storage": {"implementation": "definitely_not_a_real_impl", "config": {}}}))
+                try:
+                    await Runtime.load(f)
+                except ImplementationNotFoundError as e:
+                    assert "definitely_not_a_real_impl" in str(e)
+                else:
+                    raise AssertionError("should have raised ImplementationNotFoundError")
+
+        async def test_malformed_manifest_raises() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text("{ bad json")
+                try:
+                    await Runtime.load(f)
+                except ManifestError:
+                    pass
+                else:
+                    raise AssertionError("malformed JSON should raise ManifestError")
+
+        async def test_pkg_dry_run() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps({"version": "1", "pkg": {"implementation": "dry_run", "config": {"extra": "data"}}}))
+                rt_pkg = await Runtime.load(f)
+                assert rt_pkg.pkg is not None
+                await rt_pkg.pkg.ensure_python(["requests>=2.0"])
+                with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tf:
+                    tf.write(b"requests\n")
+                    tf_path = tf.name
+                try:
+                    await rt_pkg.pkg.ensure_from_manifest(tf_path)
+                finally:
+                    Path(tf_path).unlink()
+                await rt_pkg.pkg.ensure_from_manifest("/nonexistent/pyproject.toml")
+
+        async def test_pkg_pip() -> None:
+            import shutil
+            if not shutil.which("pip"):
+                return
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps({"version": "1", "pkg": {"implementation": "pip", "config": {}}}))
                 rt_pip = await Runtime.load(f)
                 assert rt_pip.pkg is not None
                 snap = await rt_pip.pkg.snapshot()
@@ -326,108 +286,121 @@ def _main() -> None:
                 names = {p.name.lower() for p in snap.packages}
                 assert "pyxen" in names
 
-        # --- Runtime __getattr__ for non-existent raises AttributeError ---
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "runtime.json"
-            f.write_text(json.dumps({"version": "1"}))
-            rt_min = await Runtime.load(f)
-            try:
-                _ = rt_min.nonexistent_primitive
-            except AttributeError as e:
-                assert "nonexistent_primitive" in str(e)
-            else:
-                raise AssertionError("should raise AttributeError for non-existent primitive")
+        async def test_getattr_raises() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps({"version": "1"}))
+                rt_min = await Runtime.load(f)
+                try:
+                    _ = rt_min.nonexistent_primitive
+                except AttributeError as e:
+                    assert "nonexistent_primitive" in str(e)
+                else:
+                    raise AssertionError("should raise AttributeError for non-existent primitive")
 
-        # --- Private attribute access raises AttributeError ---
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "runtime.json"
-            f.write_text(json.dumps({"version": "1"}))
-            rt_min = await Runtime.load(f)
-            import contextlib
-            with contextlib.suppress(AttributeError):
-                _ = rt_min.__dict__  # private, raises
+        async def test_private_attr_raises() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps({"version": "1"}))
+                rt_min = await Runtime.load(f)
+                import contextlib
+                with contextlib.suppress(AttributeError):
+                    _ = rt_min.__dict__
 
-        # --- Extension loading: cron extension is initialized from manifest ---
-        with tempfile.TemporaryDirectory() as tmp:
-            manifest = {
-                "version": "1",
-                "storage": {"implementation": "inmemory", "config": {}},
-                "cron": {"jobs": [{"name": "t", "command": "echo hi", "schedule": "* * * * *"}]},
-            }
-            f = Path(tmp) / "runtime.json"
-            f.write_text(json.dumps(manifest))
-            rt_cron = await Runtime.load(f)
-            # cron may be present or None depending on backend availability
-            if hasattr(rt_cron, "cron"):
-                t = await rt_cron.cron.status("t")
-                if t is not None:
-                    assert t.name == "t"
+        async def test_cron_extension() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                manifest = {
+                    "version": "1",
+                    "storage": {"implementation": "inmemory", "config": {}},
+                    "cron": {"jobs": [{"name": "t", "command": "echo hi", "schedule": "* * * * *"}]},
+                }
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps(manifest))
+                rt_cron = await Runtime.load(f)
+                if hasattr(rt_cron, "cron"):
+                    t = await rt_cron.cron.status("t")
+                    if t is not None:
+                        assert t.name == "t"
 
-        # --- No cron section → rt.cron is absent ---
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "runtime.json"
-            f.write_text(json.dumps({"version": "1"}))
-            rt_min = await Runtime.load(f)
-            try:
-                _ = rt_min.cron
-            except AttributeError:
-                pass
-            else:
-                raise AssertionError("no cron section → rt.cron should not exist")
+        async def test_no_cron_section() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps({"version": "1"}))
+                rt_min = await Runtime.load(f)
+                try:
+                    _ = rt_min.cron
+                except AttributeError:
+                    pass
+                else:
+                    raise AssertionError("no cron section -> rt.cron should not exist")
 
-        # --- _config_has_secret_refs: top-level ---
-        assert _config_has_secret_refs({SECRET_REF_KEY: "mykey"}) is True
-        assert _config_has_secret_refs({"not_secret": "val"}) is False
-        assert _config_has_secret_refs({SECRET_REF_KEY: "k", "extra": 1}) is False
+        async def test_config_has_secret_refs() -> None:
+            assert _config_has_secret_refs({SECRET_REF_KEY: "mykey"}) is True
+            assert _config_has_secret_refs({"not_secret": "val"}) is False
+            assert _config_has_secret_refs({SECRET_REF_KEY: "k", "extra": 1}) is False
+            assert _config_has_secret_refs({"creds": {SECRET_REF_KEY: "k"}}) is True
+            assert _config_has_secret_refs({"a": {"b": [{SECRET_REF_KEY: "x"}]}}) is True
+            assert _config_has_secret_refs(None) is False
+            assert _config_has_secret_refs("string") is False
+            assert _config_has_secret_refs(42) is False
 
-        # --- _config_has_secret_refs: nested ---
-        assert _config_has_secret_refs({"creds": {SECRET_REF_KEY: "k"}}) is True
-        assert _config_has_secret_refs({"a": {"b": [{SECRET_REF_KEY: "x"}]}}) is True
+        async def test_two_phase_with_secret() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps({
+                    "version": "1",
+                    "secrets": {"implementation": "dotenv", "config": {"path": str(Path(tmp) / ".env")}},
+                    "storage": {"implementation": "inmemory", "config": {"credentials": {SECRET_REF_KEY: "gcp"}}},
+                }))
+                rt_secret = await Runtime.load(f)
+                assert rt_secret.secrets is not None
+                assert rt_secret.storage is not None
 
-        # --- _config_has_secret_refs: non-dict/non-list ---
-        assert _config_has_secret_refs(None) is False
-        assert _config_has_secret_refs("string") is False
-        assert _config_has_secret_refs(42) is False
+        async def test_two_phase_without_secret_raises() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps({
+                    "version": "1",
+                    "storage": {"implementation": "inmemory", "config": {"credentials": {SECRET_REF_KEY: "gcp"}}},
+                }))
+                try:
+                    await Runtime.load(f)
+                except ManifestError as e:
+                    assert SECRET_REF_KEY in str(e)
+                else:
+                    raise AssertionError("$secret ref without secrets should raise ManifestError")
 
-        # --- Two-phase build: $secret ref with secrets primitive ---
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "runtime.json"
-            f.write_text(json.dumps({
-                "version": "1",
-                "secrets": {"implementation": "dotenv", "config": {"path": str(Path(tmp) / ".env")}},
-                "storage": {"implementation": "inmemory", "config": {"credentials": {SECRET_REF_KEY: "gcp"}}},
-            }))
-            rt_secret = await Runtime.load(f)
-            assert rt_secret.secrets is not None
-            assert rt_secret.storage is not None
+        async def test_two_phase_no_refs() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "runtime.json"
+                f.write_text(json.dumps({
+                    "version": "1",
+                    "storage": {"implementation": "inmemory", "config": {}},
+                    "secrets": {"implementation": "dotenv", "config": {"path": str(Path(tmp) / ".env")}},
+                }))
+                rt_no_ref = await Runtime.load(f)
+                assert rt_no_ref.storage is not None
+                assert rt_no_ref.secrets is not None
 
-        # --- Two-phase build: $secret ref without secrets primitive raises ---
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "runtime.json"
-            f.write_text(json.dumps({
-                "version": "1",
-                "storage": {"implementation": "inmemory", "config": {"credentials": {SECRET_REF_KEY: "gcp"}}},
-            }))
-            try:
-                await Runtime.load(f)
-            except ManifestError as e:
-                assert SECRET_REF_KEY in str(e)
-            else:
-                raise AssertionError("$secret ref without secrets should raise ManifestError")
+        await arun_tests(
+            test_full_manifest,
+            test_partial_manifest,
+            test_unknown_primitive_ignored,
+            test_unknown_impl_raises,
+            test_malformed_manifest_raises,
+            test_pkg_dry_run,
+            test_pkg_pip,
+            test_getattr_raises,
+            test_private_attr_raises,
+            test_cron_extension,
+            test_no_cron_section,
+            test_config_has_secret_refs,
+            test_two_phase_with_secret,
+            test_two_phase_without_secret_raises,
+            test_two_phase_no_refs,
+        )
 
-        # --- Two-phase build: no $secret refs → secrets=None passed to build ---
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "runtime.json"
-            f.write_text(json.dumps({
-                "version": "1",
-                "storage": {"implementation": "inmemory", "config": {}},
-                "secrets": {"implementation": "dotenv", "config": {"path": str(Path(tmp) / ".env")}},
-            }))
-            rt_no_ref = await Runtime.load(f)
-            assert rt_no_ref.storage is not None
-            assert rt_no_ref.secrets is not None
-
-    asyncio.run(run_tests())
+    asyncio.run(_run_tests())
 
 
 if __name__ == "__main__":

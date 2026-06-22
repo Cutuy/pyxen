@@ -88,66 +88,85 @@ def _main() -> None:
     import tempfile
     from pathlib import Path
 
-    async def go() -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            b = build({"path": str(Path(tmp) / "b.json"), "daily_limit": 1000})
+    from pyxen._testlib import arun_tests
 
-            # First check on a fresh file
-            check = await b.check("gpt-4o", 500)
-            assert check.allowed is True
-            assert check.remaining == 500
-            assert check.reason is None
+    async def _run_tests() -> None:
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                b = build({"path": str(Path(tmp) / "b.json"), "daily_limit": 1000})
 
-            # Charge 300, then check for 200: 1000 - 300 - 200 = 500
-            await b.charge("gpt-4o", tokens=300, dollars=0.0)
-            check2 = await b.check("gpt-4o", 200)
-            assert check2.allowed is True  # soft: always allowed
-            assert check2.remaining == 500
+                async def test_first_check_fresh_file() -> None:
+                    check = await b.check("gpt-4o", 500)
+                    assert check.allowed is True
+                    assert check.remaining == 500
+                    assert check.reason is None
 
-            # Over-budget: soft impl still returns allowed=True but reason is set
-            await b.charge("gpt-4o", tokens=900, dollars=0.0)
-            check3 = await b.check("gpt-4o", 100)
-            assert check3.allowed is True  # soft
-            assert check3.reason is not None
-            assert "budget" in check3.reason.lower() or "soft" in check3.reason.lower()
-            assert check3.remaining == 0  # clamps at 0
+                async def test_charge_then_check() -> None:
+                    await b.charge("gpt-4o", tokens=300, dollars=0.0)
+                    check2 = await b.check("gpt-4o", 200)
+                    assert check2.allowed is True
+                    assert check2.remaining == 500
 
-            # Charge negative or zero is a no-op (max(0, tokens))
-            await b.charge("gpt-4o", tokens=-100, dollars=0.0)
-            # No assertion on the negative case other than no error.
+                async def test_over_budget_soft() -> None:
+                    await b.charge("gpt-4o", tokens=900, dollars=0.0)
+                    check3 = await b.check("gpt-4o", 100)
+                    assert check3.allowed is True
+                    assert check3.reason is not None
+                    assert "budget" in check3.reason.lower() or "soft" in check3.reason.lower()
+                    assert check3.remaining == 0
 
-            # Existing file with corrupt data resets to zero
-            with tempfile.TemporaryDirectory() as tmp2:
-                f = Path(tmp2) / "b.json"
+                async def test_negative_charge_noop() -> None:
+                    await b.charge("gpt-4o", tokens=-100, dollars=0.0)
+
+                await arun_tests(
+                    test_first_check_fresh_file,
+                    test_charge_then_check,
+                    test_over_budget_soft,
+                    test_negative_charge_noop,
+                )
+
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "b.json"
                 f.write_text("not valid json")
                 b2 = build({"path": str(f), "daily_limit": 100})
-                check4 = await b2.check("m", 50)
-                assert check4.allowed is True
-                assert check4.remaining == 50  # reset to 0 spent
 
-            # daily_limit default
-            with tempfile.TemporaryDirectory() as tmp3:
-                f = Path(tmp3) / "b.json"
+                async def test_corrupt_file_reset() -> None:
+                    check4 = await b2.check("m", 50)
+                    assert check4.allowed is True
+                    assert check4.remaining == 50
+
+                await arun_tests(test_corrupt_file_reset)
+
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "b.json"
                 b_default = build({"path": str(f)})
-                check5 = await b_default.check("m", 1)
-                assert check5.budget is not None
-                assert check5.budget.daily_limit == 100_000  # default
 
-            # Persistence: charge, then re-load from the same file
-            with tempfile.TemporaryDirectory() as tmp4:
-                f = Path(tmp4) / "b.json"
+                async def test_daily_limit_default() -> None:
+                    check5 = await b_default.check("m", 1)
+                    assert check5.budget is not None
+                    assert check5.budget.daily_limit == 100_000
+
+                await arun_tests(test_daily_limit_default)
+
+            with tempfile.TemporaryDirectory() as tmp:
+                f = Path(tmp) / "b.json"
                 b_persist = build({"path": str(f), "daily_limit": 1000})
                 await b_persist.charge("gpt-4o", tokens=600, dollars=0.0)
-                # Re-load from the same file
                 b_reload = build({"path": str(f), "daily_limit": 1000})
-                check6 = await b_reload.check("gpt-4o", 500)
-                assert check6.allowed is True
-                assert check6.reason is not None  # 600+500=1100 > 1000
-                assert check6.remaining == 0
-                check7 = await b_reload.check("gpt-4o", 1)
-                assert check7.remaining == 399  # 1000 - 600 - 1 = 399
 
-    asyncio.run(go())
+                async def test_persistence() -> None:
+                    check6 = await b_reload.check("gpt-4o", 500)
+                    assert check6.allowed is True
+                    assert check6.reason is not None
+                    assert check6.remaining == 0
+                    check7 = await b_reload.check("gpt-4o", 1)
+                    assert check7.remaining == 399
+
+                await arun_tests(test_persistence)
+        finally:
+            pass
+
+    asyncio.run(_run_tests())
 
     # Missing path raises
     try:

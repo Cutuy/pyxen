@@ -269,138 +269,151 @@ def _main() -> None:
     import tempfile
     from pathlib import Path
 
+    from pyxen._testlib import arun_tests
     from ...core.storage import QueryFilter
 
-    async def go() -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            # Set up two mounts: one in tmp/data, another in tmp/config
-            data_dir = Path(tmp) / "data"
-            config_dir = Path(tmp) / "config"
-            data_dir.mkdir()
-            config_dir.mkdir()
-            # Pre-seed a file on disk that the app will read via rt.storage
-            (data_dir / "overview.json").write_text(
-                json.dumps({"title": "From disk", "size": 42})
-            )
-            (config_dir / "settings.json").write_text(
-                json.dumps({"theme": "dark", "version": 1})
-            )
-
-            # Build the impl via the factory
-            impl = build(
-                {
-                    "mounts": [
-                        {"namespace": "data", "type": "local_dir", "src": str(data_dir)},
-                        {"namespace": "config", "type": "local_dir", "src": str(config_dir)},
-                    ]
-                }
-            )
-
-            # Read the pre-seeded file via storage
-            record = await impl.get("data", "overview")
-            assert record == {"title": "From disk", "size": 42}
-
-            # Write a new file via storage
-            await impl.put("data", "fresh", {"hello": "world", "n": 7})
-            on_disk = json.loads((data_dir / "fresh.json").read_text())
-            assert on_disk == {"hello": "world", "n": 7}
-
-            # Query the namespace
-            results = await impl.query("data")
-            assert len(results) == 2  # overview + fresh
-
-            # Query with filter
-            only_fresh = await impl.query("data", QueryFilter(equals={"hello": "world"}))
-            assert only_fresh == [{"hello": "world", "n": 7}]
-
-            # Query with limit
-            limited = await impl.query("data", QueryFilter(limit=1))
-            assert len(limited) == 1
-
-            # Cross-namespace isolation
-            settings = await impl.get("config", "settings")
-            assert settings == {"theme": "dark", "version": 1}
-            not_there = await impl.get("config", "overview")
-            assert not_there is None
-
-            # Delete a file via storage
-            assert await impl.delete("data", "fresh") is True
-            assert (data_dir / "fresh.json").exists() is False
-            assert await impl.get("data", "fresh") is None
-            # Delete missing returns False
-            assert await impl.delete("data", "missing") is False
-
-            # Mount another namespace — verify the second mount works in isolation
-            await impl.put("config", "extra", {"k": "v"})
-            extra = await impl.get("config", "extra")
-            assert extra == {"k": "v"}
-
-            # Atomic write: a put with a malformed dict still leaves a valid file
-            # (we don't validate the dict shape; we just round-trip JSON)
-            await impl.put("data", "nested", {"a": {"b": [1, 2, 3]}})
-            nested = await impl.get("data", "nested")
-            assert nested == {"a": {"b": [1, 2, 3]}}
-
-        # --- Error cases ---
-
-        # Empty mounts list
+    async def _run_tests() -> None:
         try:
-            build({"mounts": []})
-        except StorageError as e:
-            assert "non-empty" in str(e)
-        else:
-            raise AssertionError("empty mounts should raise StorageError")
+            with tempfile.TemporaryDirectory() as tmp:
+                data_dir = Path(tmp) / "data"
+                config_dir = Path(tmp) / "config"
+                data_dir.mkdir()
+                config_dir.mkdir()
+                (data_dir / "overview.json").write_text(
+                    json.dumps({"title": "From disk", "size": 42})
+                )
+                (config_dir / "settings.json").write_text(
+                    json.dumps({"theme": "dark", "version": 1})
+                )
 
-        # Missing namespace
-        try:
-            build({"mounts": [{"type": "local_dir", "src": "."}]})
-        except StorageError as e:
-            assert "namespace" in str(e)
-        else:
-            raise AssertionError("missing namespace should raise")
+                impl = build(
+                    {
+                        "mounts": [
+                            {"namespace": "data", "type": "local_dir", "src": str(data_dir)},
+                            {"namespace": "config", "type": "local_dir", "src": str(config_dir)},
+                        ]
+                    }
+                )
 
-        # Duplicate namespace
-        try:
-            build(
-                {
-                    "mounts": [
-                        {"namespace": "x", "type": "local_dir", "src": "."},
-                        {"namespace": "x", "type": "local_dir", "src": "."},
-                    ]
-                }
-            )
-        except StorageError as e:
-            assert "duplicate" in str(e)
-        else:
-            raise AssertionError("duplicate namespace should raise")
+                async def test_read_pre_seeded() -> None:
+                    record = await impl.get("data", "overview")
+                    assert record == {"title": "From disk", "size": 42}
 
-        # Unknown mount type
-        try:
-            build(
-                {
-                    "mounts": [
-                        {"namespace": "x", "type": "sftp_thing", "src": "x"}
-                    ]
-                }
-            )
-        except StorageError as e:
-            assert "unknown" in str(e) or "sftp" in str(e)
-        else:
-            raise AssertionError("unknown mount type should raise")
+                async def test_write_new() -> None:
+                    await impl.put("data", "fresh", {"hello": "world", "n": 7})
+                    on_disk = json.loads((data_dir / "fresh.json").read_text())
+                    assert on_disk == {"hello": "world", "n": 7}
 
-        # Access to a non-mounted namespace
-        async def go_unmounted() -> None:
-            impl = build(
-                {"mounts": [{"namespace": "x", "type": "local_dir", "src": "."}]}
-            )
-            try:
-                await impl.get("not_mounted", "anything")
-            except StorageError as e:
-                assert "not mounted" in str(e)
-            else:
-                raise AssertionError("unmounted namespace should raise")
+                async def test_query() -> None:
+                    results = await impl.query("data")
+                    assert len(results) == 2
 
-        asyncio.run(go_unmounted())
+                async def test_query_with_filter() -> None:
+                    only_fresh = await impl.query("data", QueryFilter(equals={"hello": "world"}))
+                    assert only_fresh == [{"hello": "world", "n": 7}]
+
+                async def test_query_with_limit() -> None:
+                    limited = await impl.query("data", QueryFilter(limit=1))
+                    assert len(limited) == 1
+
+                async def test_cross_namespace_isolation() -> None:
+                    settings = await impl.get("config", "settings")
+                    assert settings == {"theme": "dark", "version": 1}
+                    not_there = await impl.get("config", "overview")
+                    assert not_there is None
+
+                async def test_delete() -> None:
+                    assert await impl.delete("data", "fresh") is True
+                    assert (data_dir / "fresh.json").exists() is False
+                    assert await impl.get("data", "fresh") is None
+
+                async def test_delete_missing() -> None:
+                    assert await impl.delete("data", "missing") is False
+
+                async def test_mount_isolation() -> None:
+                    await impl.put("config", "extra", {"k": "v"})
+                    extra = await impl.get("config", "extra")
+                    assert extra == {"k": "v"}
+
+                async def test_atomic_write() -> None:
+                    await impl.put("data", "nested", {"a": {"b": [1, 2, 3]}})
+                    nested = await impl.get("data", "nested")
+                    assert nested == {"a": {"b": [1, 2, 3]}}
+
+                await arun_tests(
+                    test_read_pre_seeded,
+                    test_write_new,
+                    test_query,
+                    test_query_with_filter,
+                    test_query_with_limit,
+                    test_cross_namespace_isolation,
+                    test_delete,
+                    test_delete_missing,
+                    test_mount_isolation,
+                    test_atomic_write,
+                )
+
+            async def test_unmounted_namespace() -> None:
+                impl = build(
+                    {"mounts": [{"namespace": "x", "type": "local_dir", "src": "."}]}
+                )
+                try:
+                    await impl.get("not_mounted", "anything")
+                except StorageError as e:
+                    assert "not mounted" in str(e)
+                else:
+                    raise AssertionError("unmounted namespace should raise")
+
+            await arun_tests(test_unmounted_namespace)
+        finally:
+            pass
+
+    asyncio.run(_run_tests())
+
+    # Empty mounts list
+    try:
+        build({"mounts": []})
+    except StorageError as e:
+        assert "non-empty" in str(e)
+    else:
+        raise AssertionError("empty mounts should raise StorageError")
+
+    # Missing namespace
+    try:
+        build({"mounts": [{"type": "local_dir", "src": "."}]})
+    except StorageError as e:
+        assert "namespace" in str(e)
+    else:
+        raise AssertionError("missing namespace should raise")
+
+    # Duplicate namespace
+    try:
+        build(
+            {
+                "mounts": [
+                    {"namespace": "x", "type": "local_dir", "src": "."},
+                    {"namespace": "x", "type": "local_dir", "src": "."},
+                ]
+            }
+        )
+    except StorageError as e:
+        assert "duplicate" in str(e)
+    else:
+        raise AssertionError("duplicate namespace should raise")
+
+    # Unknown mount type
+    try:
+        build(
+            {
+                "mounts": [
+                    {"namespace": "x", "type": "sftp_thing", "src": "x"}
+                ]
+            }
+        )
+    except StorageError as e:
+        assert "unknown" in str(e) or "sftp" in str(e)
+    else:
+        raise AssertionError("unknown mount type should raise")
 
 
 if __name__ == "__main__":

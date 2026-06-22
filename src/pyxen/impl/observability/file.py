@@ -124,111 +124,121 @@ def _main() -> None:
     import tempfile
     from pathlib import Path
 
-    async def go() -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            log_path = str(Path(tmp) / "traces.jsonl")
+    from pyxen._testlib import arun_tests
 
-            obs = build({"path": log_path, "level": "info"})
-            try:
-                async with obs.trace("test-span") as span:
-                    span.set_attribute("user", "alice")
-                    span.set_attribute("count", 42)
-                    span.log("info", "starting work", extra="x")
-                    span.log("warn", "something happened", code=500)
-            finally:
-                obs.close()
-
-            # Read back and verify
-            lines = Path(log_path).read_text(encoding="utf-8").splitlines()
-            assert len(lines) == 4, f"expected 4 lines, got {len(lines)}: {lines!r}"
-
-            # span_start
-            start = json.loads(lines[0])
-            assert start["event"] == "span_start"
-            assert start["span"] == "test-span"
-
-            # log lines
-            log1 = json.loads(lines[1])
-            assert log1["event"] == "log"
-            assert log1["span"] == "test-span"
-            assert log1["level"] == "info"
-            assert log1["message"] == "starting work"
-            assert log1["extra"] == "x"
-
-            log2 = json.loads(lines[2])
-            assert log2["level"] == "warn"
-            assert log2["code"] == 500
-
-            # span_end
-            end = json.loads(lines[3])
-            assert end["event"] == "span_end"
-            assert end["span"] == "test-span"
-            assert end["attributes"]["user"] == "alice"
-            assert end["attributes"]["count"] == 42
-            assert end["error"] is None
-
-        # Span inside an exception captures the error name
-        with tempfile.TemporaryDirectory() as tmp:
-            log_path = str(Path(tmp) / "errors.jsonl")
-            obs2 = build({"path": log_path})
-            try:
-                try:
-                    async with obs2.trace("error-span") as span:
-                        span.set_attribute("op", "test")
-                        raise ValueError("boom")
-                except ValueError:
-                    pass
-            finally:
-                obs2.close()
-
-            end_err = json.loads(
-                [line for line in Path(log_path).read_text(encoding="utf-8").splitlines() if line][-1]
-            )
-            assert end_err["error"] == "ValueError"
-
-        # Default path
-        obs3 = build({})
+    async def _run_tests() -> None:
         try:
-            async with obs3.trace("default") as span:
-                span.set_attribute("key", "val")
+            async def test_json_emission() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    log_path = str(Path(tmp) / "traces.jsonl")
+
+                    obs = build({"path": log_path, "level": "info"})
+                    try:
+                        async with obs.trace("test-span") as span:
+                            span.set_attribute("user", "alice")
+                            span.set_attribute("count", 42)
+                            span.log("info", "starting work", extra="x")
+                            span.log("warn", "something happened", code=500)
+                    finally:
+                        obs.close()
+
+                    lines = Path(log_path).read_text(encoding="utf-8").splitlines()
+                    assert len(lines) == 4, f"expected 4 lines, got {len(lines)}: {lines!r}"
+
+                    start = json.loads(lines[0])
+                    assert start["event"] == "span_start"
+                    assert start["span"] == "test-span"
+
+                    log1 = json.loads(lines[1])
+                    assert log1["event"] == "log"
+                    assert log1["span"] == "test-span"
+                    assert log1["level"] == "info"
+                    assert log1["message"] == "starting work"
+                    assert log1["extra"] == "x"
+
+                    log2 = json.loads(lines[2])
+                    assert log2["level"] == "warn"
+                    assert log2["code"] == 500
+
+                    end = json.loads(lines[3])
+                    assert end["event"] == "span_end"
+                    assert end["span"] == "test-span"
+                    assert end["attributes"]["user"] == "alice"
+                    assert end["attributes"]["count"] == 42
+                    assert end["error"] is None
+
+            async def test_error_capture() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    log_path = str(Path(tmp) / "errors.jsonl")
+                    obs2 = build({"path": log_path})
+                    try:
+                        try:
+                            async with obs2.trace("error-span") as span:
+                                span.set_attribute("op", "test")
+                                raise ValueError("boom")
+                        except ValueError:
+                            pass
+                    finally:
+                        obs2.close()
+
+                    end_err = json.loads(
+                        [line for line in Path(log_path).read_text(encoding="utf-8").splitlines() if line][-1]
+                    )
+                    assert end_err["error"] == "ValueError"
+
+            async def test_default_path() -> None:
+                obs3 = build({})
+                try:
+                    async with obs3.trace("default") as span:
+                        span.set_attribute("key", "val")
+                finally:
+                    obs3.close()
+                    default_path = Path.cwd() / "pyxen-traces.jsonl"
+                    assert default_path.exists()
+                    default_path.unlink()
+
+            async def test_parent_dirs_auto_created() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    deep_path = str(Path(tmp) / "a" / "b" / "c" / "deep.jsonl")
+                    obs4 = build({"path": deep_path})
+                    try:
+                        async with obs4.trace("nest") as span:
+                            span.set_attribute("depth", 3)
+                    finally:
+                        obs4.close()
+                    assert Path(deep_path).exists()
+
+            async def test_unicode() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    unicode_path = str(Path(tmp) / "unicode.jsonl")
+                    obs5 = build({"path": unicode_path})
+                    try:
+                        async with obs5.trace("span-\U0001f600-\u4e2d\u6587") as span:
+                            span.set_attribute("emoji", "\U0001f600")
+                            span.set_attribute("greeting", "\u4f60\u597d")
+                            span.log("info", "\u043f\u0440\u0438\u0432\u0435\u0442", lang="ru")
+                    finally:
+                        obs5.close()
+                    unicode_lines = Path(unicode_path).read_text(encoding="utf-8").splitlines()
+                    assert len(unicode_lines) == 3
+                    unicode_start = json.loads(unicode_lines[0])
+                    assert "\u4e2d\u6587" in unicode_start["span"]
+                    unicode_end = json.loads(unicode_lines[-1])
+                    assert unicode_end["event"] == "span_end"
+                    assert "\U0001f600" in unicode_end["attributes"]["emoji"]
+                    assert unicode_end["attributes"]["greeting"] == "\u4f60\u597d"
+
+            await arun_tests(
+                test_json_emission,
+                test_error_capture,
+                test_default_path,
+                test_parent_dirs_auto_created,
+                test_unicode,
+            )
         finally:
-            obs3.close()
-            default_path = Path.cwd() / "pyxen-traces.jsonl"
-            assert default_path.exists()
-            default_path.unlink()
+            pass
 
-        # Parent dirs are auto-created
-        with tempfile.TemporaryDirectory() as tmp:
-            deep_path = str(Path(tmp) / "a" / "b" / "c" / "deep.jsonl")
-            obs4 = build({"path": deep_path})
-            try:
-                async with obs4.trace("nest") as span:
-                    span.set_attribute("depth", 3)
-            finally:
-                obs4.close()
-            assert Path(deep_path).exists()
-
-        # Unicode span name, attributes, and log data
-        with tempfile.TemporaryDirectory() as tmp:
-            unicode_path = str(Path(tmp) / "unicode.jsonl")
-            obs5 = build({"path": unicode_path})
-            try:
-                async with obs5.trace("span-\U0001f600-\u4e2d\u6587") as span:
-                    span.set_attribute("emoji", "\U0001f600")
-                    span.set_attribute("greeting", "\u4f60\u597d")
-                    span.log("info", "\u043f\u0440\u0438\u0432\u0435\u0442", lang="ru")
-            finally:
-                obs5.close()
-            unicode_lines = Path(unicode_path).read_text(encoding="utf-8").splitlines()
-            assert len(unicode_lines) == 3  # span_start, log, span_end
-            unicode_start = json.loads(unicode_lines[0])
-            assert "\u4e2d\u6587" in unicode_start["span"]
-            unicode_end = json.loads(unicode_lines[-1])
-            assert unicode_end["event"] == "span_end"
-            assert "\U0001f600" in unicode_end["attributes"]["emoji"]
-            assert unicode_end["attributes"]["greeting"] == "\u4f60\u597d"
-
-    asyncio.run(go())
+    asyncio.run(_run_tests())
 
 
 if __name__ == "__main__":

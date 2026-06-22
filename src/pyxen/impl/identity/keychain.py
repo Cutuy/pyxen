@@ -51,26 +51,30 @@ def build(config: dict[str, object]) -> KeychainIdentity:
 
 def _main() -> None:
     """Test entry point for keychain identity impl. Skips if `keyring` not installed."""
+    from pyxen._testlib import skip, run_tests
+
     try:
         import keyring  # noqa: F401
     except ImportError:
-        # No keyring available — verify the impl raises a clear error when built.
-        impl = KeychainIdentity({})
-        import asyncio
-        try:
-            asyncio.run(impl.current())
-        except IdentityError as e:
-            assert "keyring" in str(e).lower()
-        else:
-            raise AssertionError("should have raised IdentityError when keyring missing")
+        def test_raises_identity_error() -> None:
+            impl = KeychainIdentity({})
+            import asyncio
+            try:
+                asyncio.run(impl.current())
+            except IdentityError as e:
+                assert "keyring" in str(e).lower()
+            else:
+                raise AssertionError("should have raised IdentityError when keyring missing")
+
+        run_tests(test_raises_identity_error)
+        skip("keyring not installed")
         return
 
-    # If keyring is installed, we don't actually have a keychain backend to write
-    # to in CI, so the test is constrained to "build succeeds". Full integration
-    # testing requires a real keychain; the protocol contract is exercised by
-    # other impls.
-    impl = KeychainIdentity({"service": "pyxen-test-service"})
-    assert impl._service == "pyxen-test-service"
+    def test_build_succeeds() -> None:
+        impl = KeychainIdentity({"service": "pyxen-test-service"})
+        assert impl._service == "pyxen-test-service"
+
+    run_tests(test_build_succeeds)
 
 
 if __name__ == "__main__":

@@ -179,193 +179,196 @@ def _main() -> None:
     import tempfile
     from pathlib import Path
 
-    async def go() -> None:
-        # --- Config with default + namespaces ---
-        with tempfile.TemporaryDirectory() as tmp:
-            data_dir = Path(tmp) / "data"
-            data_dir.mkdir()
-            (data_dir / "greeting.json").write_text(
-                '{"text": "Hello from fs", "n": 42}'
+    from pyxen._testlib import arun_tests
+
+    async def _run_tests() -> None:
+        try:
+            async def test_default_and_named_backend() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    data_dir = Path(tmp) / "data"
+                    data_dir.mkdir()
+                    (data_dir / "greeting.json").write_text(
+                        '{"text": "Hello from fs", "n": 42}'
+                    )
+
+                    cfg: dict[str, object] = {
+                        "default": {
+                            "implementation": "inmemory",
+                            "config": {},
+                        },
+                        "namespaces": {
+                            "fs": {
+                                "implementation": "local_fs_mount",
+                                "config": {
+                                    "mounts": [
+                                        {"namespace": "fs", "type": "local_dir", "src": str(data_dir)}
+                                    ]
+                                },
+                            },
+                        },
+                    }
+                    router = build(cfg)
+
+                    await router.put("any_ns", "a", {"x": 1})
+                    got = await router.get("any_ns", "a")
+                    assert got == {"x": 1}
+
+                    fs_got = await router.get("fs", "greeting")
+                    assert fs_got == {"text": "Hello from fs", "n": 42}
+
+                    await router.put("fs", "written", {"via": "router"})
+                    written = await router.get("fs", "written")
+                    assert written == {"via": "router"}
+
+                    assert (data_dir / "written.json").is_file()
+
+                    assert await router.get("any_ns", "greeting") is None
+                    assert await router.get("fs", "a") is None
+
+            async def test_namespaces_only() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    a_dir = Path(tmp) / "a"
+                    b_dir = Path(tmp) / "b"
+                    a_dir.mkdir()
+                    b_dir.mkdir()
+
+                    cfg2: dict[str, object] = {
+                        "namespaces": {
+                            "alpha": {
+                                "implementation": "local_fs_mount",
+                                "config": {
+                                    "mounts": [
+                                        {"namespace": "alpha", "type": "local_dir", "src": str(a_dir)}
+                                    ]
+                                },
+                            },
+                            "beta": {
+                                "implementation": "local_fs_mount",
+                                "config": {
+                                    "mounts": [
+                                        {"namespace": "beta", "type": "local_dir", "src": str(b_dir)}
+                                    ]
+                                },
+                            },
+                        },
+                    }
+                    router2 = build(cfg2)
+
+                    await router2.put("alpha", "k1", {"val": "a-val"})
+                    await router2.put("beta", "k1", {"val": "b-val"})
+                    assert (await router2.get("alpha", "k1")) == {"val": "a-val"}
+                    assert (await router2.get("beta", "k1")) == {"val": "b-val"}
+
+                    try:
+                        await router2.get("no_mapping", "anything")
+                    except StorageError as e:
+                        assert "no explicit backend" in str(e)
+                    else:
+                        raise AssertionError("unmapped namespace should raise")
+
+            async def test_query_and_delete() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    d = Path(tmp) / "q"
+                    d.mkdir()
+                    (d / "red.json").write_text('{"color": "red", "v": 1}')
+                    (d / "blue.json").write_text('{"color": "blue", "v": 2}')
+
+                    cfg3: dict[str, object] = {
+                        "namespaces": {
+                            "colors": {
+                                "implementation": "local_fs_mount",
+                                "config": {
+                                    "mounts": [
+                                        {"namespace": "colors", "type": "local_dir", "src": str(d)}
+                                    ]
+                                },
+                            },
+                        },
+                    }
+                    router3 = build(cfg3)
+                    reds = await router3.query("colors", QueryFilter(equals={"color": "red"}))
+                    assert len(reds) == 1
+                    assert reds[0]["color"] == "red"
+
+                    assert await router3.delete("colors", "red") is True
+                    assert (d / "red.json").exists() is False
+                    assert await router3.delete("colors", "red") is False
+
+            async def test_empty_config_error() -> None:
+                try:
+                    build({})
+                except StorageError as e:
+                    assert "at least one backend" in str(e)
+                else:
+                    raise AssertionError("empty config should raise")
+
+            async def test_bad_sub_backend_error() -> None:
+                try:
+                    build({
+                        "namespaces": {
+                            "x": {"implementation": "not_a_real_impl", "config": {}},
+                        },
+                    })
+                except StorageError as e:
+                    assert "not found" in str(e) or "not_a_real_impl" in str(e)
+                else:
+                    raise AssertionError("bad impl name should raise")
+
+            async def test_missing_implementation_error() -> None:
+                try:
+                    build({
+                        "namespaces": {
+                            "x": {"config": {}},
+                        },
+                    })
+                except StorageError as e:
+                    assert "implementation" in str(e)
+                else:
+                    raise AssertionError("missing implementation should raise")
+
+            async def test_empty_namespace_error() -> None:
+                try:
+                    build({
+                        "namespaces": {
+                            "": {"implementation": "inmemory", "config": {}},
+                        },
+                    })
+                except StorageError as e:
+                    assert "non-empty" in str(e)
+                else:
+                    raise AssertionError("empty namespace should raise")
+
+            async def test_non_dict_default_error() -> None:
+                try:
+                    build({"default": "not a dict"})
+                except StorageError as e:
+                    assert "must be a JSON object" in str(e)
+                else:
+                    raise AssertionError("non-dict default should raise")
+
+            async def test_only_default_success() -> None:
+                cfg_only_default: dict[str, object] = {
+                    "default": {"implementation": "inmemory", "config": {}},
+                }
+                router_only_default = build(cfg_only_default)
+                await router_only_default.put("anything", "k", {"v": 1})
+                assert await router_only_default.get("anything", "k") == {"v": 1}
+
+            await arun_tests(
+                test_default_and_named_backend,
+                test_namespaces_only,
+                test_query_and_delete,
+                test_empty_config_error,
+                test_bad_sub_backend_error,
+                test_missing_implementation_error,
+                test_empty_namespace_error,
+                test_non_dict_default_error,
+                test_only_default_success,
             )
+        finally:
+            pass
 
-            cfg: dict[str, object] = {
-                "default": {
-                    "implementation": "inmemory",
-                    "config": {},
-                },
-                "namespaces": {
-                    "fs": {
-                        "implementation": "local_fs_mount",
-                        "config": {
-                            "mounts": [
-                                {"namespace": "fs", "type": "local_dir", "src": str(data_dir)}
-                            ]
-                        },
-                    },
-                },
-            }
-            router = build(cfg)
-
-            # Default backend: inmemory
-            await router.put("any_ns", "a", {"x": 1})
-            got = await router.get("any_ns", "a")
-            assert got == {"x": 1}
-
-            # Named backend: fs mount
-            fs_got = await router.get("fs", "greeting")
-            assert fs_got == {"text": "Hello from fs", "n": 42}
-
-            # Write via router to fs namespace
-            await router.put("fs", "written", {"via": "router"})
-            written = await router.get("fs", "written")
-            assert written == {"via": "router"}
-
-            # File actually exists on disk
-            assert (data_dir / "written.json").is_file()
-
-            # Namespace isolation
-            assert await router.get("any_ns", "greeting") is None  # default backend
-            assert await router.get("fs", "a") is None  # fs backend
-
-        # --- Config with only namespaces (no default) ---
-        with tempfile.TemporaryDirectory() as tmp:
-            a_dir = Path(tmp) / "a"
-            b_dir = Path(tmp) / "b"
-            a_dir.mkdir()
-            b_dir.mkdir()
-
-            cfg2: dict[str, object] = {
-                "namespaces": {
-                    "alpha": {
-                        "implementation": "local_fs_mount",
-                        "config": {
-                            "mounts": [
-                                {"namespace": "alpha", "type": "local_dir", "src": str(a_dir)}
-                            ]
-                        },
-                    },
-                    "beta": {
-                        "implementation": "local_fs_mount",
-                        "config": {
-                            "mounts": [
-                                {"namespace": "beta", "type": "local_dir", "src": str(b_dir)}
-                            ]
-                        },
-                    },
-                },
-            }
-            router2 = build(cfg2)
-
-            await router2.put("alpha", "k1", {"val": "a-val"})
-            await router2.put("beta", "k1", {"val": "b-val"})
-            assert (await router2.get("alpha", "k1")) == {"val": "a-val"}
-            assert (await router2.get("beta", "k1")) == {"val": "b-val"}
-
-            # Unmapped namespace with no default raises
-            try:
-                await router2.get("no_mapping", "anything")
-            except StorageError as e:
-                assert "no explicit backend" in str(e)
-            else:
-                raise AssertionError("unmapped namespace should raise")
-
-        # --- Query delegates correctly ---
-        with tempfile.TemporaryDirectory() as tmp:
-            d = Path(tmp) / "q"
-            d.mkdir()
-            (d / "red.json").write_text('{"color": "red", "v": 1}')
-            (d / "blue.json").write_text('{"color": "blue", "v": 2}')
-
-            cfg3: dict[str, object] = {
-                "namespaces": {
-                    "colors": {
-                        "implementation": "local_fs_mount",
-                        "config": {
-                            "mounts": [
-                                {"namespace": "colors", "type": "local_dir", "src": str(d)}
-                            ]
-                        },
-                    },
-                },
-            }
-            router3 = build(cfg3)
-            # Query does NOT pass the namespace to the sub-backend as-is
-            # because local_fs_mount.query("colors", ...) resolves the mount
-            reds = await router3.query("colors", QueryFilter(equals={"color": "red"}))
-            assert len(reds) == 1
-            assert reds[0]["color"] == "red"
-
-            # Delete via router
-            assert await router3.delete("colors", "red") is True
-            assert (d / "red.json").exists() is False
-            assert await router3.delete("colors", "red") is False  # already gone
-
-        # --- Error: empty config ---
-        try:
-            build({})
-        except StorageError as e:
-            assert "at least one backend" in str(e)
-        else:
-            raise AssertionError("empty config should raise")
-
-        # --- Error: bad sub-backend name ---
-        try:
-            build({
-                "namespaces": {
-                    "x": {"implementation": "not_a_real_impl", "config": {}},
-                },
-            })
-        except StorageError as e:
-            assert "not found" in str(e) or "not_a_real_impl" in str(e)
-        else:
-            raise AssertionError("bad impl name should raise")
-
-        # --- Error: missing implementation key ---
-        try:
-            build({
-                "namespaces": {
-                    "x": {"config": {}},
-                },
-            })
-        except StorageError as e:
-            assert "implementation" in str(e)
-        else:
-            raise AssertionError("missing implementation should raise")
-
-        # (Duplicate namespace check is in the code path but can't be
-        # triggered from Python dict literal — duplicate keys are silently
-        # overwritten at the dict level. The check exists as a defense
-        # against non-literal config loading.)
-
-        # --- Error: null/empty namespace key ---
-        try:
-            build({
-                "namespaces": {
-                    "": {"implementation": "inmemory", "config": {}},
-                },
-            })
-        except StorageError as e:
-            assert "non-empty" in str(e)
-        else:
-            raise AssertionError("empty namespace should raise")
-
-        # --- Error: default is not a dict ---
-        try:
-            build({"default": "not a dict"})
-        except StorageError as e:
-            assert "must be a JSON object" in str(e)
-        else:
-            raise AssertionError("non-dict default should raise")
-
-        # --- Success with only default (no namespaces) ---
-        cfg_only_default: dict[str, object] = {
-            "default": {"implementation": "inmemory", "config": {}},
-        }
-        router_only_default = build(cfg_only_default)
-        await router_only_default.put("anything", "k", {"v": 1})
-        assert await router_only_default.get("anything", "k") == {"v": 1}
-
-    asyncio.run(go())
+    asyncio.run(_run_tests())
 
 
 if __name__ == "__main__":

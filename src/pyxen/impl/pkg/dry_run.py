@@ -42,23 +42,36 @@ def _main() -> None:
     import tempfile
     from pathlib import Path
 
-    async def go() -> None:
+    from pyxen._testlib import arun_tests
+
+    async def _run_tests() -> None:
         impl = build({})
+        try:
+            async def test_ensure_python_with_deps() -> None:
+                await impl.ensure_python(["numpy>=2.0", "pandas"])
 
-        # ensure_python is a no-op
-        await impl.ensure_python(["numpy>=2.0", "pandas"])
-        await impl.ensure_python([])  # empty list is fine
+            async def test_ensure_python_empty_list() -> None:
+                await impl.ensure_python([])
 
-        # ensure_from_manifest on existing file is a no-op
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "pyproject.toml"
-            f.write_text("[project]\nname = 'x'\n")
-            await impl.ensure_from_manifest(str(f))
+            async def test_ensure_from_manifest_existing_file() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    f = Path(tmp) / "pyproject.toml"
+                    f.write_text("[project]\nname = 'x'\n")
+                    await impl.ensure_from_manifest(str(f))
 
-        # ensure_from_manifest on missing file is a no-op (logs and skips)
-        await impl.ensure_from_manifest("/nonexistent/pyproject.toml")
+            async def test_ensure_from_manifest_missing_file() -> None:
+                await impl.ensure_from_manifest("/nonexistent/pyproject.toml")
 
-    asyncio.run(go())
+            await arun_tests(
+                test_ensure_python_with_deps,
+                test_ensure_python_empty_list,
+                test_ensure_from_manifest_existing_file,
+                test_ensure_from_manifest_missing_file,
+            )
+        finally:
+            pass
+
+    asyncio.run(_run_tests())
 
 
 if __name__ == "__main__":

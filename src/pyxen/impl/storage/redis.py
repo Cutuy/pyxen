@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from pyxen._testlib import ok, skip
+
 
 try:
     import redis.asyncio as aioredis  # type: ignore[import-not-found]
@@ -99,35 +99,37 @@ def build(config: dict[str, object]) -> RedisStorage:
 def _main() -> None:
     """Test entry point — requires a local Redis instance."""
     import asyncio
+    from pyxen._testlib import arun_tests, skip
 
-    async def go() -> None:
+    if not _HAS_REDIS:
+        skip("not installed")
+        return
+
+    async def _run_tests() -> None:
         s = RedisStorage({"url": "redis://localhost:6379/0", "prefix": "pyxen:test:"})
 
-        # Put
-        await s.put("test", "hello", {"message": "world"})
+        async def test_put() -> None:
+            await s.put("test", "hello", {"message": "world"})
 
-        # Get
-        val = await s.get("test", "hello")
-        assert val == {"message": "world"}, val
+        async def test_get() -> None:
+            val = await s.get("test", "hello")
+            assert val == {"message": "world"}, val
 
-        # List
-        items = await s.list("test")
-        assert len(items) >= 1
+        async def test_list() -> None:
+            items = await s.list("test")
+            assert len(items) >= 1
 
-        # Delete
-        await s.delete("test", "hello")
-        val2 = await s.get("test", "hello")
-        assert val2 is None
+        async def test_delete() -> None:
+            await s.delete("test", "hello")
+            val2 = await s.get("test", "hello")
+            assert val2 is None
 
-        ok("redis")
+        await arun_tests(test_put, test_get, test_list, test_delete, label="redis")
 
-    if _HAS_REDIS:
-        try:
-            asyncio.run(go())
-        except Exception as e:
-            skip(f"no server? — {e}")
-    else:
-        skip("not installed")
+    try:
+        asyncio.run(_run_tests())
+    except Exception as e:
+        skip(f"no server? — {e}")
 
 
 if __name__ == "__main__":

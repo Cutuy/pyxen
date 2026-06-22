@@ -47,16 +47,19 @@ class _TraceContext:
 
 
 def _main() -> None:
-    """Test entry point for this module.
+    from pyxen._testlib import run_tests
 
-    ``ObservabilityImpl`` is a Protocol; ``Span`` and ``_TraceContext`` are
-    abstract shapes. Concrete tests live in ``impl/observability/*.py``.
-    """
-    assert hasattr(ObservabilityImpl, "trace")
-    bases_names = {getattr(b, "__name__", "") for b in ObservabilityImpl.__bases__}
-    assert "Protocol" in bases_names or hasattr(ObservabilityImpl, "_is_protocol")
+    def test_observabilityimpl_is_protocol() -> None:
+        assert hasattr(ObservabilityImpl, "trace")
+        bases_names = {getattr(b, "__name__", "") for b in ObservabilityImpl.__bases__}
+        assert "Protocol" in bases_names or hasattr(ObservabilityImpl, "_is_protocol")
 
-    # Span methods are no-op placeholders; calling them should not raise.
-    s = Span()
-    s.set_attribute("k", "v")
-    s.log("info", "hi", extra=1)
+    def test_span_methods_dont_raise() -> None:
+        s = Span()
+        s.set_attribute("k", "v")
+        s.log("info", "hi", extra=1)
+
+    run_tests(
+        test_observabilityimpl_is_protocol,
+        test_span_methods_dont_raise,
+    )

@@ -93,92 +93,99 @@ def _main() -> None:
     import json
     import sys
 
-    async def go() -> None:
-        # Capture stdout by replacing sys.stdout
-        captured = io.StringIO()
+    from pyxen._testlib import arun_tests
+
+    async def _run_tests() -> None:
         original_stdout = sys.stdout
-        sys.stdout = captured
         try:
-            obs = build({"level": "info"})
-            async with obs.trace("test-span") as span:
-                span.set_attribute("user", "alice")
-                span.set_attribute("count", 42)
-                span.log("info", "starting work", extra="x")
-                span.log("warn", "something happened", code=500)
+            async def test_json_emission() -> None:
+                captured = io.StringIO()
+                sys.stdout = captured
+                try:
+                    obs = build({"level": "info"})
+                    async with obs.trace("test-span") as span:
+                        span.set_attribute("user", "alice")
+                        span.set_attribute("count", 42)
+                        span.log("info", "starting work", extra="x")
+                        span.log("warn", "something happened", code=500)
+                finally:
+                    sys.stdout = original_stdout
+
+                output = captured.getvalue()
+                lines = [line for line in output.splitlines() if line.startswith("{")]
+                assert len(lines) == 4, f"expected 4 lines, got {len(lines)}: {output!r}"
+
+                start = json.loads(lines[0])
+                assert start["event"] == "span_start"
+                assert start["span"] == "test-span"
+
+                log1 = json.loads(lines[1])
+                assert log1["event"] == "log"
+                assert log1["span"] == "test-span"
+                assert log1["level"] == "info"
+                assert log1["message"] == "starting work"
+                assert log1["extra"] == "x"
+
+                log2 = json.loads(lines[2])
+                assert log2["level"] == "warn"
+                assert log2["code"] == 500
+
+                end = json.loads(lines[3])
+                assert end["event"] == "span_end"
+                assert end["span"] == "test-span"
+                assert end["attributes"]["user"] == "alice"
+                assert end["attributes"]["count"] == 42
+                assert end["error"] is None
+
+            async def test_error_capture() -> None:
+                captured2 = io.StringIO()
+                sys.stdout = captured2
+                try:
+                    obs2 = build({})
+                    try:
+                        async with obs2.trace("error-span") as span:
+                            span.set_attribute("op", "test")
+                            raise ValueError("boom")
+                    except ValueError:
+                        pass
+                finally:
+                    sys.stdout = original_stdout
+
+                end_err = json.loads(
+                    [line for line in captured2.getvalue().splitlines() if line.startswith("{")][-1]
+                )
+                assert end_err["error"] == "ValueError"
+
+            async def test_unicode() -> None:
+                captured3 = io.StringIO()
+                sys.stdout = captured3
+                try:
+                    obs3 = build({})
+                    async with obs3.trace("span-\U0001f600-\u4e2d\u6587") as span:
+                        span.set_attribute("emoji", "\U0001f600")
+                        span.set_attribute("greeting", "\u4f60\u597d")
+                        span.log("info", "\u043f\u0440\u0438\u0432\u0435\u0442", lang="ru")
+                finally:
+                    sys.stdout = original_stdout
+
+                unicode_lines = [line for line in captured3.getvalue().splitlines() if line.startswith("{")]
+                assert len(unicode_lines) == 3
+                unicode_start = json.loads(unicode_lines[0])
+                assert "\u4e2d\u6587" in unicode_start["span"]
+                unicode_end = json.loads(unicode_lines[-1])
+                assert unicode_end["event"] == "span_end"
+                assert "\U0001f600" in unicode_end["attributes"]["emoji"]
+                assert unicode_end["attributes"]["greeting"] == "\u4f60\u597d"
+
+            await arun_tests(
+                test_json_emission,
+                test_error_capture,
+                test_unicode,
+            )
         finally:
             sys.stdout = original_stdout
 
-        # Parse each line as JSON
-        output = captured.getvalue()
-        lines = [line for line in output.splitlines() if line.startswith("{")]
-        assert len(lines) == 4, f"expected 4 lines, got {len(lines)}: {output!r}"
-
-        # span_start
-        start = json.loads(lines[0])
-        assert start["event"] == "span_start"
-        assert start["span"] == "test-span"
-
-        # log lines
-        log1 = json.loads(lines[1])
-        assert log1["event"] == "log"
-        assert log1["span"] == "test-span"
-        assert log1["level"] == "info"
-        assert log1["message"] == "starting work"
-        assert log1["extra"] == "x"
-
-        log2 = json.loads(lines[2])
-        assert log2["level"] == "warn"
-        assert log2["code"] == 500
-
-        # span_end
-        end = json.loads(lines[3])
-        assert end["event"] == "span_end"
-        assert end["span"] == "test-span"
-        assert end["attributes"]["user"] == "alice"
-        assert end["attributes"]["count"] == 42
-        assert end["error"] is None
-
-        # Span inside an exception captures the error name
-        captured2 = io.StringIO()
-        sys.stdout = captured2
-        try:
-            obs2 = build({})
-            try:
-                async with obs2.trace("error-span") as span:
-                    span.set_attribute("op", "test")
-                    raise ValueError("boom")
-            except ValueError:
-                pass
-        finally:
-            sys.stdout = original_stdout
-
-        end_err = json.loads(
-            [line for line in captured2.getvalue().splitlines() if line.startswith("{")][-1]
-        )
-        assert end_err["error"] == "ValueError"
-
-        # Unicode span name, attributes, and log data
-        captured3 = io.StringIO()
-        sys.stdout = captured3
-        try:
-            obs3 = build({})
-            async with obs3.trace("span-\U0001f600-\u4e2d\u6587") as span:
-                span.set_attribute("emoji", "\U0001f600")
-                span.set_attribute("greeting", "\u4f60\u597d")
-                span.log("info", "\u043f\u0440\u0438\u0432\u0435\u0442", lang="ru")
-        finally:
-            sys.stdout = original_stdout
-
-        unicode_lines = [line for line in captured3.getvalue().splitlines() if line.startswith("{")]
-        assert len(unicode_lines) == 3  # span_start, log, span_end
-        unicode_start = json.loads(unicode_lines[0])
-        assert "\u4e2d\u6587" in unicode_start["span"]
-        unicode_end = json.loads(unicode_lines[-1])
-        assert unicode_end["event"] == "span_end"
-        assert "\U0001f600" in unicode_end["attributes"]["emoji"]
-        assert unicode_end["attributes"]["greeting"] == "\u4f60\u597d"
-
-    asyncio.run(go())
+    asyncio.run(_run_tests())
 
 
 if __name__ == "__main__":

@@ -148,250 +148,299 @@ def parse_manifest(raw: dict[str, Any]) -> Manifest:
 
 
 def _main() -> None:
-    """Test entry point for this module. Covers the manifest parser thoroughly."""
-    import tempfile
-    from pathlib import Path
+    from pyxen._testlib import run_tests
 
-    # --- Minimal valid manifest ---
-    m = parse_manifest({"version": "1"})
-    assert m.version == "1"
-    assert m.bindings == {}
-    assert m.raw == {"version": "1"}
+    def test_minimal_manifest() -> None:
+        m = parse_manifest({"version": "1"})
+        assert m.version == "1"
+        assert m.bindings == {}
+        assert m.raw == {"version": "1"}
 
-    # --- Full manifest with all 7 primitives ---
-    raw = {
-        "version": "1",
-        "identity": {"implementation": "env", "config": {}},
-        "tokens": {"implementation": "json_budget", "config": {"path": "/tmp/b.json"}},
-        "ipc": {"implementation": "inproc", "config": {}},
-        "pkg": {"implementation": "dry_run", "config": {}},
-        "storage": {"implementation": "inmemory", "config": {}},
-        "secrets": {"implementation": "dotenv", "config": {"path": "/tmp/.env"}},
-        "observability": {"implementation": "stdout", "config": {"level": "info"}},
-    }
-    m_full = parse_manifest(raw)
-    assert m_full.version == "1"
-    assert len(m_full.bindings) == 7
-    assert m_full.get("storage").implementation == "inmemory"
-    assert m_full.get("storage").config == {}
-    assert m_full.get("tokens").config == {"path": "/tmp/b.json"}
+    def test_full_manifest() -> None:
+        raw = {
+            "version": "1",
+            "identity": {"implementation": "env", "config": {}},
+            "tokens": {"implementation": "json_budget", "config": {"path": "/tmp/b.json"}},
+            "ipc": {"implementation": "inproc", "config": {}},
+            "pkg": {"implementation": "dry_run", "config": {}},
+            "storage": {"implementation": "inmemory", "config": {}},
+            "secrets": {"implementation": "dotenv", "config": {"path": "/tmp/.env"}},
+            "observability": {"implementation": "stdout", "config": {"level": "info"}},
+        }
+        m_full = parse_manifest(raw)
+        assert m_full.version == "1"
+        assert len(m_full.bindings) == 7
+        assert m_full.get("storage").implementation == "inmemory"
+        assert m_full.get("storage").config == {}
+        assert m_full.get("tokens").config == {"path": "/tmp/b.json"}
 
-    # --- Missing version ---
-    try:
-        parse_manifest({"storage": {"implementation": "x", "config": {}}})
-    except ManifestError as e:
-        assert "version" in str(e).lower()
-    else:
-        raise AssertionError("should have raised ManifestError")
-
-    # --- Non-string version ---
-    try:
-        bad: dict[str, object] = {"version": 42}
-        parse_manifest(bad)
-    except ManifestError:
-        pass
-    else:
-        raise AssertionError("should have raised on non-string version")
-
-    # --- Missing implementation string ---
-    try:
-        parse_manifest({"version": "1", "storage": {"config": {}}})
-    except ManifestError as e:
-        assert "implementation" in str(e)
-    else:
-        raise AssertionError("should have raised on missing implementation")
-
-    # --- Non-string implementation ---
-    try:
-        parse_manifest({"version": "1", "storage": {"implementation": 42, "config": {}}})
-    except ManifestError:
-        pass
-    else:
-        raise AssertionError("should have raised on non-string implementation")
-
-    # --- Empty implementation string ---
-    try:
-        parse_manifest({"version": "1", "storage": {"implementation": "", "config": {}}})
-    except ManifestError:
-        pass
-    else:
-        raise AssertionError("should have raised on empty implementation")
-
-    # --- Non-object section ---
-    try:
-        parse_manifest({"version": "1", "storage": "not a dict"})
-    except ManifestError:
-        pass
-    else:
-        raise AssertionError("should have raised on non-object section")
-
-    # --- Non-object config ---
-    try:
-        parse_manifest({"version": "1", "storage": {"implementation": "x", "config": "bad"}})
-    except ManifestError:
-        pass
-    else:
-        raise AssertionError("should have raised on non-object config")
-
-    # --- Unknown primitives are silently ignored (forward-compat) ---
-    m_unknown = parse_manifest(
-        {"version": "1", "made_up_thing": {"implementation": "x", "config": {}}}
-    )
-    assert "made_up_thing" not in m_unknown.bindings
-    assert len(m_unknown.bindings) == 0
-
-    # --- Config defaults to empty dict when missing ---
-    m_no_config = parse_manifest({"version": "1", "storage": {"implementation": "x"}})
-    assert m_no_config.get("storage").config == {}
-
-    # --- Manifest.get() raises for missing primitive ---
-    try:
-        m.get("storage")
-    except ManifestError as e:
-        assert "storage" in str(e)
-    else:
-        raise AssertionError("Manifest.get() should raise on missing primitive")
-
-    # --- Manifest.get() returns the binding when present ---
-    b = m_full.get("storage")
-    assert b.name == "storage"
-    assert b.implementation == "inmemory"
-    assert b.config == {}
-
-    # --- load_manifest from disk ---
-    with tempfile.TemporaryDirectory() as tmp:
-        f = Path(tmp) / "runtime.json"
-        f.write_text('{"version": "1", "identity": {"implementation": "env", "config": {}}}')
-        m_loaded = load_manifest(f)
-        assert m_loaded.version == "1"
-        assert m_loaded.get("identity").implementation == "env"
-
-    # --- load_manifest: missing file ---
-    with tempfile.TemporaryDirectory() as tmp:
+    def test_missing_version() -> None:
         try:
-            load_manifest(Path(tmp) / "nope.json")
+            parse_manifest({"storage": {"implementation": "x", "config": {}}})
         except ManifestError as e:
-            assert "not found" in str(e).lower() or "nope" in str(e)
+            assert "version" in str(e).lower()
         else:
-            raise AssertionError("load_manifest should raise on missing file")
+            raise AssertionError("should have raised ManifestError")
 
-    # --- load_manifest: invalid JSON ---
-    with tempfile.TemporaryDirectory() as tmp:
-        f = Path(tmp) / "bad.json"
-        f.write_text("{ this is not json")
+    def test_non_string_version() -> None:
         try:
-            load_manifest(f)
-        except ManifestError as e:
-            assert "JSON" in str(e) or "json" in str(e)
-        else:
-            raise AssertionError("load_manifest should raise on invalid JSON")
-
-    # --- load_manifest: top-level not a dict ---
-    with tempfile.TemporaryDirectory() as tmp:
-        f = Path(tmp) / "list.json"
-        f.write_text("[1, 2, 3]")
-        try:
-            load_manifest(f)
+            parse_manifest({"version": 42})
         except ManifestError:
             pass
         else:
-            raise AssertionError("load_manifest should raise on non-object JSON")
+            raise AssertionError("should have raised on non-string version")
 
-    # --- PRIMITIVE_NAMES contains all 7 ---
-    assert set(PRIMITIVE_NAMES) == {
-        "identity",
-        "tokens",
-        "ipc",
-        "pkg",
-        "storage",
-        "secrets",
-        "observability",
-    }
+    def test_missing_implementation() -> None:
+        try:
+            parse_manifest({"version": "1", "storage": {"config": {}}})
+        except ManifestError as e:
+            assert "implementation" in str(e)
+        else:
+            raise AssertionError("should have raised on missing implementation")
 
-    # --- SCHEMA path points to the JSON file ---
-    assert MANIFEST_SCHEMA.is_file()
-    schema_content = json.loads(MANIFEST_SCHEMA.read_text())
-    assert schema_content["type"] == "object"
+    def test_non_string_implementation() -> None:
+        try:
+            parse_manifest({"version": "1", "storage": {"implementation": 42, "config": {}}})
+        except ManifestError:
+            pass
+        else:
+            raise AssertionError("should have raised on non-string implementation")
 
-    # --- cron extension: absent → empty dict ---
-    m_no_ext = parse_manifest({"version": "1"})
-    assert m_no_ext.extensions == {}
+    def test_empty_implementation() -> None:
+        try:
+            parse_manifest({"version": "1", "storage": {"implementation": "", "config": {}}})
+        except ManifestError:
+            pass
+        else:
+            raise AssertionError("should have raised on empty implementation")
 
-    # --- cron extension: present → stored in extensions dict ---
-    m_ext = parse_manifest({
-        "version": "1",
-        "cron": {
-            "jobs": [
-                {"name": "backup", "command": "/usr/bin/backup.sh", "schedule": "0 3 * * *"},
-                {"name": "heartbeat", "command": "curl -s https://example.com", "schedule": "*/5 * * * *", "enabled": True, "environment": {"PATH": "/usr/bin"}},
-                {"name": "cleanup", "command": "rm -rf /tmp/*", "schedule": "@daily"},
-            ]
+    def test_non_object_section() -> None:
+        try:
+            parse_manifest({"version": "1", "storage": "not a dict"})
+        except ManifestError:
+            pass
+        else:
+            raise AssertionError("should have raised on non-object section")
+
+    def test_non_object_config() -> None:
+        try:
+            parse_manifest({"version": "1", "storage": {"implementation": "x", "config": "bad"}})
+        except ManifestError:
+            pass
+        else:
+            raise AssertionError("should have raised on non-object config")
+
+    def test_unknown_primitives_ignored() -> None:
+        m_unknown = parse_manifest(
+            {"version": "1", "made_up_thing": {"implementation": "x", "config": {}}}
+        )
+        assert "made_up_thing" not in m_unknown.bindings
+        assert len(m_unknown.bindings) == 0
+
+    def test_config_defaults_to_empty() -> None:
+        m_no_config = parse_manifest({"version": "1", "storage": {"implementation": "x"}})
+        assert m_no_config.get("storage").config == {}
+
+    def test_manifest_get_raises_for_missing() -> None:
+        m = parse_manifest({"version": "1"})
+        try:
+            m.get("storage")
+        except ManifestError as e:
+            assert "storage" in str(e)
+        else:
+            raise AssertionError("Manifest.get() should raise on missing primitive")
+
+    def test_manifest_get_returns_binding() -> None:
+        raw = {
+            "version": "1",
+            "storage": {"implementation": "inmemory", "config": {}},
         }
-    })
-    assert "cron" in m_ext.extensions
-    cron_section = m_ext.extensions["cron"]
-    assert len(cron_section["jobs"]) == 3
+        m_full = parse_manifest(raw)
+        b = m_full.get("storage")
+        assert b.name == "storage"
+        assert b.implementation == "inmemory"
+        assert b.config == {}
 
-    # --- Extension section: non-object raises ---
-    try:
-        parse_manifest({"version": "1", "cron": "bad"})
-    except ManifestError as e:
-        assert "cron" in str(e)
-    else:
-        raise AssertionError("non-object extension section should raise ManifestError")
+    def test_load_manifest_from_disk() -> None:
+        import tempfile
+        from pathlib import Path
 
-    # --- frozen Manifest including extensions ---
-    assert m_ext.extensions["cron"]["jobs"][0]["name"] == "backup"
-    try:
-        m_ext.extensions = {}  # type: ignore[misc]
-    except AttributeError:
-        pass
-    else:
-        raise AssertionError("Manifest should be frozen")
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "runtime.json"
+            f.write_text('{"version": "1", "identity": {"implementation": "env", "config": {}}}')
+            m_loaded = load_manifest(f)
+            assert m_loaded.version == "1"
+            assert m_loaded.get("identity").implementation == "env"
 
-    # --- _config_has_secret_refs top-level ---
-    assert _config_has_secret_refs({SECRET_REF_KEY: "mykey"}) is True
-    assert _config_has_secret_refs({"not_secret": "val"}) is False
-    assert _config_has_secret_refs({SECRET_REF_KEY: "k", "extra": 1}) is False
+    def test_load_manifest_missing_file() -> None:
+        import tempfile
+        from pathlib import Path
 
-    # --- _config_has_secret_refs nested in dict ---
-    assert _config_has_secret_refs({"creds": {SECRET_REF_KEY: "k"}}) is True
-    assert _config_has_secret_refs({"a": {"b": {"c": {SECRET_REF_KEY: "deep"}}}}) is True
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                load_manifest(Path(tmp) / "nope.json")
+            except ManifestError as e:
+                assert "not found" in str(e).lower() or "nope" in str(e)
+            else:
+                raise AssertionError("load_manifest should raise on missing file")
 
-    # --- _config_has_secret_refs in list ---
-    assert _config_has_secret_refs([{SECRET_REF_KEY: "k"}]) is True
-    assert _config_has_secret_refs([1, "str", {"nested": [{SECRET_REF_KEY: "x"}]}]) is True
+    def test_load_manifest_invalid_json() -> None:
+        import tempfile
+        from pathlib import Path
 
-    # --- _config_has_secret_refs non-dict/non-list ---
-    assert _config_has_secret_refs("plain string") is False
-    assert _config_has_secret_refs(None) is False
-    assert _config_has_secret_refs(42) is False
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "bad.json"
+            f.write_text("{ this is not json")
+            try:
+                load_manifest(f)
+            except ManifestError as e:
+                assert "JSON" in str(e) or "json" in str(e)
+            else:
+                raise AssertionError("load_manifest should raise on invalid JSON")
 
-    # --- $secret ref without secrets primitive raises ManifestError ---
-    try:
-        parse_manifest({
+    def test_load_manifest_non_object() -> None:
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "list.json"
+            f.write_text("[1, 2, 3]")
+            try:
+                load_manifest(f)
+            except ManifestError:
+                pass
+            else:
+                raise AssertionError("load_manifest should raise on non-object JSON")
+
+    def test_primitive_names() -> None:
+        assert set(PRIMITIVE_NAMES) == {
+            "identity",
+            "tokens",
+            "ipc",
+            "pkg",
+            "storage",
+            "secrets",
+            "observability",
+        }
+
+    def test_schema_path() -> None:
+        assert MANIFEST_SCHEMA.is_file()
+        schema_content = json.loads(MANIFEST_SCHEMA.read_text())
+        assert schema_content["type"] == "object"
+
+    def test_cron_absent() -> None:
+        m_no_ext = parse_manifest({"version": "1"})
+        assert m_no_ext.extensions == {}
+
+    def test_cron_present() -> None:
+        m_ext = parse_manifest({
+            "version": "1",
+            "cron": {
+                "jobs": [
+                    {"name": "backup", "command": "/usr/bin/backup.sh", "schedule": "0 3 * * *"},
+                    {"name": "heartbeat", "command": "curl -s https://example.com", "schedule": "*/5 * * * *", "enabled": True, "environment": {"PATH": "/usr/bin"}},
+                    {"name": "cleanup", "command": "rm -rf /tmp/*", "schedule": "@daily"},
+                ]
+            }
+        })
+        assert "cron" in m_ext.extensions
+        assert len(m_ext.extensions["cron"]["jobs"]) == 3
+
+    def test_cron_non_object_raises() -> None:
+        try:
+            parse_manifest({"version": "1", "cron": "bad"})
+        except ManifestError as e:
+            assert "cron" in str(e)
+        else:
+            raise AssertionError("non-object extension section should raise ManifestError")
+
+    def test_manifest_frozen() -> None:
+        m_ext = parse_manifest({
+            "version": "1",
+            "cron": {"jobs": [{"name": "backup", "command": "/usr/bin/backup.sh", "schedule": "0 3 * * *"}]}
+        })
+        try:
+            m_ext.extensions = {}  # type: ignore[misc]
+        except AttributeError:
+            pass
+        else:
+            raise AssertionError("Manifest should be frozen")
+
+    def test_config_has_secret_refs_top_level() -> None:
+        assert _config_has_secret_refs({SECRET_REF_KEY: "mykey"}) is True
+        assert _config_has_secret_refs({"not_secret": "val"}) is False
+        assert _config_has_secret_refs({SECRET_REF_KEY: "k", "extra": 1}) is False
+
+    def test_config_has_secret_refs_nested() -> None:
+        assert _config_has_secret_refs({"creds": {SECRET_REF_KEY: "k"}}) is True
+        assert _config_has_secret_refs({"a": {"b": {"c": {SECRET_REF_KEY: "deep"}}}}) is True
+
+    def test_config_has_secret_refs_in_list() -> None:
+        assert _config_has_secret_refs([{SECRET_REF_KEY: "k"}]) is True
+        assert _config_has_secret_refs([1, "str", {"nested": [{SECRET_REF_KEY: "x"}]}]) is True
+
+    def test_config_has_secret_refs_non_dict() -> None:
+        assert _config_has_secret_refs("plain string") is False
+        assert _config_has_secret_refs(None) is False
+        assert _config_has_secret_refs(42) is False
+
+    def test_secret_ref_without_secrets_raises() -> None:
+        try:
+            parse_manifest({
+                "version": "1",
+                "storage": {
+                    "implementation": "bq",
+                    "config": {"credentials": {SECRET_REF_KEY: "gcp"}},
+                },
+            })
+        except ManifestError as e:
+            assert SECRET_REF_KEY in str(e)
+        else:
+            raise AssertionError("$secret ref without secrets should raise ManifestError")
+
+    def test_secret_ref_with_secrets_succeeds() -> None:
+        m_ok = parse_manifest({
             "version": "1",
             "storage": {
                 "implementation": "bq",
                 "config": {"credentials": {SECRET_REF_KEY: "gcp"}},
             },
+            "secrets": {"implementation": "dotenv", "config": {}},
         })
-    except ManifestError as e:
-        assert SECRET_REF_KEY in str(e)
-    else:
-        raise AssertionError("$secret ref without secrets should raise ManifestError")
+        assert "secrets" in m_ok.bindings
+        assert "storage" in m_ok.bindings
 
-    # --- $secret ref with secrets primitive succeeds ---
-    m_ok = parse_manifest({
-        "version": "1",
-        "storage": {
-            "implementation": "bq",
-            "config": {"credentials": {SECRET_REF_KEY: "gcp"}},
-        },
-        "secrets": {"implementation": "dotenv", "config": {}},
-    })
-    assert "secrets" in m_ok.bindings
-    assert "storage" in m_ok.bindings
+    run_tests(
+        test_minimal_manifest,
+        test_full_manifest,
+        test_missing_version,
+        test_non_string_version,
+        test_missing_implementation,
+        test_non_string_implementation,
+        test_empty_implementation,
+        test_non_object_section,
+        test_non_object_config,
+        test_unknown_primitives_ignored,
+        test_config_defaults_to_empty,
+        test_manifest_get_raises_for_missing,
+        test_manifest_get_returns_binding,
+        test_load_manifest_from_disk,
+        test_load_manifest_missing_file,
+        test_load_manifest_invalid_json,
+        test_load_manifest_non_object,
+        test_primitive_names,
+        test_schema_path,
+        test_cron_absent,
+        test_cron_present,
+        test_cron_non_object_raises,
+        test_manifest_frozen,
+        test_config_has_secret_refs_top_level,
+        test_config_has_secret_refs_nested,
+        test_config_has_secret_refs_in_list,
+        test_config_has_secret_refs_non_dict,
+        test_secret_ref_without_secrets_raises,
+        test_secret_ref_with_secrets_succeeds,
+    )
 
 
 if __name__ == "__main__":

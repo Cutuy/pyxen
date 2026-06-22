@@ -74,30 +74,42 @@ def _load_backend(name: str) -> Any:
 
 
 def _main() -> None:
+    from pyxen._testlib import run_tests, arun_tests
     import asyncio
     import contextlib
 
-    sched = CronScheduler(backend="crontab")
-    assert sched.backend == "crontab"
-
-    sched2 = CronScheduler(backend="windows")
-    assert sched2.backend == "windows"
-
-    try:
-        CronScheduler(backend="nonexistent")
-    except CronBackendError:
-        pass
-    else:
-        raise AssertionError("expected CronBackendError for unknown backend")
-
-    with contextlib.suppress(CronBackendError):
-        _detect_platform()
-
-    async def go() -> None:
+    def test_cron_scheduler_crontab() -> None:
         sched = CronScheduler(backend="crontab")
         assert sched.backend == "crontab"
 
-    asyncio.run(go())
+    def test_cron_scheduler_windows() -> None:
+        sched2 = CronScheduler(backend="windows")
+        assert sched2.backend == "windows"
+
+    def test_cron_scheduler_nonexistent() -> None:
+        try:
+            CronScheduler(backend="nonexistent")
+        except CronBackendError:
+            pass
+        else:
+            raise AssertionError("expected CronBackendError for unknown backend")
+
+    def test_detect_platform() -> None:
+        with contextlib.suppress(CronBackendError):
+            _detect_platform()
+
+    run_tests(
+        test_cron_scheduler_crontab,
+        test_cron_scheduler_windows,
+        test_cron_scheduler_nonexistent,
+        test_detect_platform,
+    )
+
+    async def test_async_go() -> None:
+        sched = CronScheduler(backend="crontab")
+        assert sched.backend == "crontab"
+
+    asyncio.run(arun_tests(test_async_go))
 
 
 if __name__ == "__main__":

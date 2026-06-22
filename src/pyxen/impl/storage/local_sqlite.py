@@ -101,90 +101,109 @@ def _main() -> None:
     import tempfile
     from pathlib import Path
 
+    from pyxen._testlib import arun_tests
     from pyxen.core import QueryFilter
 
-    async def go() -> None:
+    async def _run_tests() -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "test.db"
             s = build({"path": str(db_path)})
 
-            # put then get
-            await s.put("ns", "k", {"v": 1, "name": "alice"})
-            assert await s.get("ns", "k") == {"v": 1, "name": "alice"}
+            async def test_put_get() -> None:
+                await s.put("ns", "k", {"v": 1, "name": "alice"})
+                assert await s.get("ns", "k") == {"v": 1, "name": "alice"}
 
-            # put overwrites
-            await s.put("ns", "k", {"v": 2})
-            assert await s.get("ns", "k") == {"v": 2}
+            async def test_put_overwrites() -> None:
+                await s.put("ns", "k", {"v": 2})
+                assert await s.get("ns", "k") == {"v": 2}
 
-            # get missing returns None
-            assert await s.get("ns", "missing") is None
-            assert await s.get("nonexistent", "k") is None
+            async def test_get_missing() -> None:
+                assert await s.get("ns", "missing") is None
+                assert await s.get("nonexistent", "k") is None
 
-            # put with empty dict
-            await s.put("ns", "empty", {})
-            assert await s.get("ns", "empty") == {}
+            async def test_put_empty_dict() -> None:
+                await s.put("ns", "empty", {})
+                assert await s.get("ns", "empty") == {}
 
-            # put with nested values (json round-trip)
-            await s.put("ns", "nested", {"a": {"b": {"c": [1, 2, 3]}}})
-            assert await s.get("ns", "nested") == {"a": {"b": {"c": [1, 2, 3]}}}
+            async def test_put_nested() -> None:
+                await s.put("ns", "nested", {"a": {"b": {"c": [1, 2, 3]}}})
+                assert await s.get("ns", "nested") == {"a": {"b": {"c": [1, 2, 3]}}}
 
-            # multiple keys
-            await s.put("ns", "a", {"v": 1})
-            await s.put("ns", "b", {"v": 2})
-            await s.put("ns", "c", {"v": 3})
-            all_in_ns = await s.query("ns")
-            assert len(all_in_ns) >= 3  # includes k, empty, nested, a, b, c
+            async def test_multiple_keys() -> None:
+                await s.put("ns", "a", {"v": 1})
+                await s.put("ns", "b", {"v": 2})
+                await s.put("ns", "c", {"v": 3})
+                all_in_ns = await s.query("ns")
+                assert len(all_in_ns) >= 3
 
-            # query with filter
-            await s.put("ns", "x1", {"tag": "red", "n": 1})
-            await s.put("ns", "x2", {"tag": "red", "n": 2})
-            await s.put("ns", "x3", {"tag": "blue", "n": 3})
-            red = await s.query("ns", QueryFilter(equals={"tag": "red"}))
-            assert all(r["tag"] == "red" for r in red)
-            assert len(red) == 2
+            async def test_query_with_filter() -> None:
+                await s.put("ns", "x1", {"tag": "red", "n": 1})
+                await s.put("ns", "x2", {"tag": "red", "n": 2})
+                await s.put("ns", "x3", {"tag": "blue", "n": 3})
+                red = await s.query("ns", QueryFilter(equals={"tag": "red"}))
+                assert all(r["tag"] == "red" for r in red)
+                assert len(red) == 2
 
-            # query with limit
-            first_three = await s.query("ns", QueryFilter(limit=3))
-            assert len(first_three) == 3
+            async def test_query_with_limit() -> None:
+                first_three = await s.query("ns", QueryFilter(limit=3))
+                assert len(first_three) == 3
 
-            # delete existing
-            assert await s.delete("ns", "a") is True
-            assert await s.get("ns", "a") is None
+            async def test_delete_existing() -> None:
+                assert await s.delete("ns", "a") is True
+                assert await s.get("ns", "a") is None
 
-            # delete missing
-            assert await s.delete("ns", "missing_xyz") is False
-            assert await s.delete("nonexistent", "k") is False
+            async def test_delete_missing() -> None:
+                assert await s.delete("ns", "missing_xyz") is False
+                assert await s.delete("nonexistent", "k") is False
 
-            # cross-namespace isolation
-            await s.put("other", "k", {"v": 99})
-            other_items = await s.query("other")
-            assert len(other_items) == 1
-            assert other_items[0]["v"] == 99
-            assert len(await s.query("ns")) != len(await s.query("other"))
+            async def test_namespace_isolation() -> None:
+                await s.put("other", "k", {"v": 99})
+                other_items = await s.query("other")
+                assert len(other_items) == 1
+                assert other_items[0]["v"] == 99
+                assert len(await s.query("ns")) != len(await s.query("other"))
 
-            # Query with filter that matches nothing
-            empty_filtered = await s.query("ns", QueryFilter(equals={"tag": "nonexistent"}))
-            assert empty_filtered == []
+            async def test_filter_no_match() -> None:
+                empty_filtered = await s.query("ns", QueryFilter(equals={"tag": "nonexistent"}))
+                assert empty_filtered == []
 
-            # Put with very long key and namespace
-            long_ns = "ns_" + ("x" * 200)
-            long_key = "key_" + ("y" * 200)
-            await s.put(long_ns, long_key, {"v": 1})
-            assert await s.get(long_ns, long_key) == {"v": 1}
+            async def test_long_key_namespace() -> None:
+                long_ns = "ns_" + ("x" * 200)
+                long_key = "key_" + ("y" * 200)
+                await s.put(long_ns, long_key, {"v": 1})
+                assert await s.get(long_ns, long_key) == {"v": 1}
 
-            # Put with unicode values
-            await s.put("ns", "unicode", {"emoji": "\U0001f600", "chinese": "\u4e2d\u6587"})
-            got_unicode = await s.get("ns", "unicode")
-            assert got_unicode == {"emoji": "\U0001f600", "chinese": "\u4e2d\u6587"}
+            async def test_unicode() -> None:
+                await s.put("ns", "unicode", {"emoji": "\U0001f600", "chinese": "\u4e2d\u6587"})
+                got_unicode = await s.get("ns", "unicode")
+                assert got_unicode == {"emoji": "\U0001f600", "chinese": "\u4e2d\u6587"}
 
-            # Persistence: close and reopen should preserve data
-            s._conn.close()
-            s2 = build({"path": str(db_path)})
-            assert await s2.get("ns", "k") == {"v": 2}
-            assert await s2.get("other", "k") == {"v": 99}
-            assert await s2.get("ns", "unicode") == {"emoji": "\U0001f600", "chinese": "\u4e2d\u6587"}
+            async def test_persistence() -> None:
+                s._conn.close()
+                s2 = build({"path": str(db_path)})
+                assert await s2.get("ns", "k") == {"v": 2}
+                assert await s2.get("other", "k") == {"v": 99}
+                assert await s2.get("ns", "unicode") == {"emoji": "\U0001f600", "chinese": "\u4e2d\u6587"}
 
-    asyncio.run(go())
+            await arun_tests(
+                test_put_get,
+                test_put_overwrites,
+                test_get_missing,
+                test_put_empty_dict,
+                test_put_nested,
+                test_multiple_keys,
+                test_query_with_filter,
+                test_query_with_limit,
+                test_delete_existing,
+                test_delete_missing,
+                test_namespace_isolation,
+                test_filter_no_match,
+                test_long_key_namespace,
+                test_unicode,
+                test_persistence,
+            )
+
+    asyncio.run(_run_tests())
 
     # Missing config path raises
     try:

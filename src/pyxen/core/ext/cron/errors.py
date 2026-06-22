@@ -14,18 +14,28 @@ class CronScheduleError(CronError):
 
 
 def _main() -> None:
-    err = CronError("base")
-    assert isinstance(err, Exception)
-    assert "base" in str(err)
+    from pyxen._testlib import run_tests
 
-    backend_err = CronBackendError("backend")
-    assert isinstance(backend_err, CronError)
+    def test_cronerror_base() -> None:
+        err = CronError("base")
+        assert isinstance(err, Exception)
+        assert "base" in str(err)
 
-    sched_err = CronScheduleError("bad expr")
-    assert isinstance(sched_err, CronError)
+    def test_cronbackenderror_inheritance() -> None:
+        backend_err = CronBackendError("backend")
+        assert isinstance(backend_err, CronError)
+        assert issubclass(CronBackendError, CronError)
 
-    assert issubclass(CronBackendError, CronError)
-    assert issubclass(CronScheduleError, CronError)
+    def test_cronscheduleerror_inheritance() -> None:
+        sched_err = CronScheduleError("bad expr")
+        assert isinstance(sched_err, CronError)
+        assert issubclass(CronScheduleError, CronError)
+
+    run_tests(
+        test_cronerror_base,
+        test_cronbackenderror_inheritance,
+        test_cronscheduleerror_inheritance,
+    )
 
 
 if __name__ == "__main__":

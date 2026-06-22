@@ -47,26 +47,35 @@ def _main() -> None:
     """Test entry point for null observability impl. No-op verification."""
     import asyncio
 
-    async def go() -> None:
+    from pyxen._testlib import arun_tests
+
+    async def _run_tests() -> None:
         obs = build({})
+        try:
+            async def test_span_context_manager() -> None:
+                async with obs.trace("span") as span:
+                    span.set_attribute("k", "v")
+                    span.set_attribute("count", 42)
+                    span.log("info", "hello", extra=1)
+                    span.log("error", "bad", code=500)
 
-        # Span context manager does not raise
-        async with obs.trace("span") as span:
-            span.set_attribute("k", "v")
-            span.set_attribute("count", 42)
-            span.log("info", "hello", extra=1)
-            span.log("error", "bad", code=500)
+            async def test_nested_spans() -> None:
+                async with obs.trace("outer"), obs.trace("inner") as inner:
+                    inner.set_attribute("nested", True)
 
-        # Nested spans are also fine
-        async with obs.trace("outer"), obs.trace("inner") as inner:
-            inner.set_attribute("nested", True)
+            async def test_trace_context_object() -> None:
+                ctx = obs.trace("never-entered")
+                assert ctx is not None
 
-        # Trace context outside a span doesn't blow up either
-        ctx = obs.trace("never-entered")
-        # Don't enter; just verify the context object exists.
-        assert ctx is not None
+            await arun_tests(
+                test_span_context_manager,
+                test_nested_spans,
+                test_trace_context_object,
+            )
+        finally:
+            pass
 
-    asyncio.run(go())
+    asyncio.run(_run_tests())
 
 
 if __name__ == "__main__":

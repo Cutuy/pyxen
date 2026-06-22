@@ -61,12 +61,14 @@ def build(config: dict[str, object]) -> DotEnvSecrets:
 def _main() -> None:
     """Test entry point for dotenv secrets impl."""
     import asyncio
+    import os
     import tempfile
     from pathlib import Path
 
+    from pyxen._testlib import arun_tests
     from pyxen.core import SecretsError
 
-    async def go() -> None:
+    async def _run_tests() -> None:
         with tempfile.TemporaryDirectory() as tmp:
             env = Path(tmp) / ".env"
             env.write_text(
@@ -79,70 +81,80 @@ def _main() -> None:
             )
             s = build({"path": str(env)})
 
-            # Basic key=value
-            assert await s.get("FOO") == "bar"
-            # Skip blank lines and comments
-            assert await s.get("BAZ") == "qux"
-            # Strip surrounding double quotes
-            assert await s.get("QUOTED") == "hello world"
-            # Strip surrounding single quotes
-            assert await s.get("SINGLE") == "single quoted"
-
-            # Empty value
-            env2 = Path(tmp) / "empty.env"
-            env2.write_text("KEY=\n")
-            s_empty = build({"path": str(env2)})
-            assert await s_empty.get("KEY") == ""
-
-            # Value with only spaces
-            env3 = Path(tmp) / "spaces.env"
-            env3.write_text("KEY=   \n")
-            s_spaces = build({"path": str(env3)})
-            assert await s_spaces.get("KEY") == ""
-
-            # Missing secret raises SecretsError
             try:
-                await s.get("NOPE")
-            except SecretsError as e:
-                assert "NOPE" in str(e)
-            else:
-                raise AssertionError("missing secret should raise SecretsError")
+                async def test_basic_key_value() -> None:
+                    assert await s.get("FOO") == "bar"
+                    assert await s.get("BAZ") == "qux"
+                    assert await s.get("QUOTED") == "hello world"
+                    assert await s.get("SINGLE") == "single quoted"
 
-            # set updates in-memory dict
-            await s.set("NEW", "value")
-            assert await s.get("NEW") == "value"
+                async def test_empty_value() -> None:
+                    env2 = Path(tmp) / "empty.env"
+                    env2.write_text("KEY=\n")
+                    s_empty = build({"path": str(env2)})
+                    assert await s_empty.get("KEY") == ""
 
-        # Falls back to env vars if not in file
-        with tempfile.TemporaryDirectory() as tmp:
-            env = Path(tmp) / ".env"
-            env.write_text("")  # empty file
-            s = build({"path": str(env)})
-            import os
-            os.environ["PYXEN_TEST_FALLBACK"] = "from-env"
-            try:
-                assert await s.get("PYXEN_TEST_FALLBACK") == "from-env"
+                async def test_spaces_value() -> None:
+                    env3 = Path(tmp) / "spaces.env"
+                    env3.write_text("KEY=   \n")
+                    s_spaces = build({"path": str(env3)})
+                    assert await s_spaces.get("KEY") == ""
+
+                async def test_missing_secret_raises() -> None:
+                    try:
+                        await s.get("NOPE")
+                    except SecretsError as e:
+                        assert "NOPE" in str(e)
+                    else:
+                        raise AssertionError("missing secret should raise SecretsError")
+
+                async def test_set_updates_in_memory() -> None:
+                    await s.set("NEW", "value")
+                    assert await s.get("NEW") == "value"
+
+                async def test_fallback_to_env_var() -> None:
+                    with tempfile.TemporaryDirectory() as tmp2:
+                        env_fb = Path(tmp2) / ".env"
+                        env_fb.write_text("")
+                        s2 = build({"path": str(env_fb)})
+                        os.environ["PYXEN_TEST_FALLBACK"] = "from-env"
+                        try:
+                            assert await s2.get("PYXEN_TEST_FALLBACK") == "from-env"
+                        finally:
+                            os.environ.pop("PYXEN_TEST_FALLBACK", None)
+
+                async def test_missing_path_config_raises() -> None:
+                    try:
+                        build({})
+                    except SecretsError:
+                        pass
+                    else:
+                        raise AssertionError("missing path should raise SecretsError")
+
+                async def test_nonexistent_file_raises_on_get() -> None:
+                    with tempfile.TemporaryDirectory() as tmp3:
+                        s3 = build({"path": str(Path(tmp3) / "nope.env")})
+                        try:
+                            await s3.get("X")
+                        except SecretsError:
+                            pass
+                        else:
+                            raise AssertionError("get on empty impl should raise SecretsError")
+
+                await arun_tests(
+                    test_basic_key_value,
+                    test_empty_value,
+                    test_spaces_value,
+                    test_missing_secret_raises,
+                    test_set_updates_in_memory,
+                    test_fallback_to_env_var,
+                    test_missing_path_config_raises,
+                    test_nonexistent_file_raises_on_get,
+                )
             finally:
-                os.environ.pop("PYXEN_TEST_FALLBACK", None)
-
-        # Missing path config raises
-        try:
-            build({})
-        except SecretsError:
-            pass
-        else:
-            raise AssertionError("missing path should raise SecretsError")
-
-        # Nonexistent file is OK (no secrets)
-        with tempfile.TemporaryDirectory() as tmp:
-            s = build({"path": str(Path(tmp) / "nope.env")})
-            try:
-                await s.get("X")
-            except SecretsError:
                 pass
-            else:
-                raise AssertionError("get on empty impl should raise SecretsError")
 
-    asyncio.run(go())
+    asyncio.run(_run_tests())
 
 
 if __name__ == "__main__":

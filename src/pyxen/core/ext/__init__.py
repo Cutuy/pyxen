@@ -70,27 +70,31 @@ async def init_extension(name: str, config: dict[str, Any], app_dir: Path | None
 
 
 def _main() -> None:
-    """Unit tests for the extension loader."""
+    from pyxen._testlib import run_tests
     import asyncio
 
-    # init_extension on unknown name raises
-    async def go() -> None:
-        try:
-            await init_extension("nonexistent_extension", {}, None)
-        except ExtensionError as e:
-            assert "unknown" in str(e).lower()
-        else:
-            raise AssertionError("expected ExtensionError")
+    def test_init_extension_unknown_name_raises() -> None:
+        async def go() -> None:
+            try:
+                await init_extension("nonexistent_extension", {}, None)
+            except ExtensionError as e:
+                assert "unknown" in str(e).lower()
+            else:
+                raise AssertionError("expected ExtensionError")
+        asyncio.run(go())
 
-        # init_extension on known module with no init() raises
-        try:
-            await init_extension("cron", {}, None)
-        except ExtensionError:
-            # The cron module does have init(), so this may succeed.
-            # We just verify it doesn't crash with wrong module path.
-            pass
+    def test_init_extension_known_module() -> None:
+        async def go() -> None:
+            try:
+                await init_extension("cron", {}, None)
+            except ExtensionError:
+                pass
+        asyncio.run(go())
 
-    asyncio.run(go())
+    run_tests(
+        test_init_extension_unknown_name_raises,
+        test_init_extension_known_module,
+    )
 
 
 if __name__ == "__main__":

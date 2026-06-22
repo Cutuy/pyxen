@@ -69,46 +69,56 @@ def build(config: dict[str, object]) -> LocalFileSecrets:
 
 
 def _main() -> None:
-    from pyxen._testlib import ok
     """Test entry point."""
     import asyncio
     import tempfile
 
-    async def go() -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / "secrets.json"
-            p.write_text(json.dumps({
-                "api-key": "sk-test-123",
-                "github": "ghp_abc",
-                "db": {"host": "db.local", "port": 5432},
-            }))
+    from pyxen._testlib import arun_tests
 
-            s = LocalFileSecrets({"path": str(p)})
+    async def _run_tests() -> None:
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                p = Path(tmp) / "secrets.json"
+                p.write_text(json.dumps({
+                    "api-key": "sk-test-123",
+                    "github": "ghp_abc",
+                    "db": {"host": "db.local", "port": 5432},
+                }))
+                s = LocalFileSecrets({"path": str(p)})
 
-            # Get string
-            v = await s.get("api-key")
-            assert v == "sk-test-123", v
+                async def test_get_string() -> None:
+                    v = await s.get("api-key")
+                    assert v == "sk-test-123", v
 
-            # Get nested
-            v2 = await s.get("db")
-            assert v2 == {"host": "db.local", "port": 5432}, v2
+                async def test_get_nested() -> None:
+                    v2 = await s.get("db")
+                    assert v2 == {"host": "db.local", "port": 5432}, v2
 
-            # Missing key
-            v3 = await s.get("nonexistent")
-            assert v3 is None
+                async def test_missing_key() -> None:
+                    v3 = await s.get("nonexistent")
+                    assert v3 is None
 
-            # List
-            names = await s.list()
-            assert sorted(names) == ["api-key", "db", "github"], names
+                async def test_list() -> None:
+                    names = await s.list()
+                    assert sorted(names) == ["api-key", "db", "github"], names
 
-        # Missing file = empty
-        s2 = LocalFileSecrets({"path": "/tmp/nonexistent-secrets.json"})
-        v4 = await s2.get("anything")
-        assert v4 is None
+                await arun_tests(
+                    test_get_string,
+                    test_get_nested,
+                    test_missing_key,
+                    test_list,
+                )
 
-        ok("local_file")
+            async def test_missing_file_is_empty() -> None:
+                s2 = LocalFileSecrets({"path": "/tmp/nonexistent-secrets.json"})
+                v4 = await s2.get("anything")
+                assert v4 is None
 
-    asyncio.run(go())
+            await arun_tests(test_missing_file_is_empty)
+        finally:
+            pass
+
+    asyncio.run(_run_tests())
 
 
 if __name__ == "__main__":

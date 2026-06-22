@@ -14,7 +14,6 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
-from ..._testlib import skip
 from ...core.ipc import Message
 
 try:
@@ -339,6 +338,8 @@ def build(config: dict[str, object]) -> A2AIpc:
 
 def _main() -> None:
     """Test entry point for A2A IPC implementation."""
+    from pyxen._testlib import skip
+
     if not _HAS_HTTPX or not _HAS_HTTPX_SSE:
         skip("httpx or httpx-sse not installed")
         return
@@ -348,7 +349,9 @@ def _main() -> None:
         skip("PYXEN_A2A_TEST_AGENT_URL not set")
         return
 
-    async def go() -> None:
+    async def _run_tests() -> None:
+        from pyxen._testlib import arun_tests
+
         config: dict[str, object] = {
             "agents": {
                 "test-agent": {"url": agent_url},
@@ -357,29 +360,31 @@ def _main() -> None:
         }
         ipc = build(config)
 
-        # Test publish (fire and forget)
-        try:
-            await ipc.publish("test-agent", {"action": "ping"})
-        except RuntimeError as exc:
-            skip(f"publish failed: {exc}")
-            return
+        async def test_publish() -> None:
+            try:
+                await ipc.publish("test-agent", {"action": "ping"})
+            except RuntimeError as exc:
+                skip(f"publish failed: {exc}")
+                return
 
-        # Test send (request/reply)
-        try:
-            reply = await ipc.send("test-agent", {"action": "ping"})
-        except RuntimeError as exc:
-            skip(f"send failed: {exc}")
-            return
+        async def test_send() -> None:
+            try:
+                reply = await ipc.send("test-agent", {"action": "ping"})
+            except RuntimeError as exc:
+                skip(f"send failed: {exc}")
+                return
 
-        assert reply.target == "test-agent", (
-            f"Expected test-agent, got {reply.target}"
-        )
-        assert reply.correlation_id is not None
-        assert len(reply.correlation_id) > 0
-        assert isinstance(reply.payload, dict)
+            assert reply.target == "test-agent", (
+                f"Expected test-agent, got {reply.target}"
+            )
+            assert reply.correlation_id is not None
+            assert len(reply.correlation_id) > 0
+            assert isinstance(reply.payload, dict)
+
+        await arun_tests(test_publish, test_send)
 
     try:
-        asyncio.run(go())
+        asyncio.run(_run_tests())
     except Exception as exc:
         skip(f"{exc}")
 

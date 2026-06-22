@@ -44,48 +44,54 @@ class IdentityImpl(Protocol):
 
 
 def _main() -> None:
-    """Test entry point for this module. Only runs when invoked directly.
+    from pyxen._testlib import run_tests
 
-    Test-only imports (if any) are scoped to this function. The module is
-    importable as a library without triggering the tests below.
-    """
-    from datetime import datetime
+    def test_identity_alice() -> None:
+        i = Identity(id="alice", name="Alice", source="keychain")
+        assert i.id == "alice"
+        assert i.name == "Alice"
+        assert i.source == "keychain"
 
-    # --- Identity dataclass ---
-    i = Identity(id="alice", name="Alice", source="keychain")
-    assert i.id == "alice"
-    assert i.name == "Alice"
-    assert i.source == "keychain"
+    def test_identity_bob_minimal() -> None:
+        i2 = Identity(id="bob")
+        assert i2.id == "bob"
+        assert i2.name is None
+        assert i2.source == "unknown"
 
-    # Minimal construction: name and source are optional
-    i2 = Identity(id="bob")
-    assert i2.id == "bob"
-    assert i2.name is None
-    assert i2.source == "unknown"
+    def test_identity_frozen() -> None:
+        i = Identity(id="alice", name="Alice", source="keychain")
+        try:
+            i.id = "mutate"  # type: ignore[misc]
+        except Exception:  # noqa: BLE001
+            pass
+        else:
+            raise AssertionError("Identity should be frozen")
 
-    # Identity is frozen
-    try:
-        i.id = "mutate"  # type: ignore[misc]
-    except Exception:  # noqa: BLE001 — frozen dataclass raises FrozenInstanceError
-        pass
-    else:
-        raise AssertionError("Identity should be frozen")
+    def test_credential_with_expires() -> None:
+        from datetime import datetime
 
-    # --- Credential dataclass ---
-    cred = Credential(
-        token="ghp_xxx",
-        target="github.com",
-        expires_at=datetime(2026, 7, 1, tzinfo=UTC),
+        cred = Credential(
+            token="ghp_xxx",
+            target="github.com",
+            expires_at=datetime(2026, 7, 1, tzinfo=UTC),
+        )
+        assert cred.token == "ghp_xxx"
+        assert cred.target == "github.com"
+        assert cred.expires_at is not None
+        assert cred.expires_at.year == 2026
+
+    def test_credential_without_optional() -> None:
+        cred2 = Credential(token="x", target="y")
+        assert cred2.expires_at is None
+        assert cred2.metadata is None
+
+    run_tests(
+        test_identity_alice,
+        test_identity_bob_minimal,
+        test_identity_frozen,
+        test_credential_with_expires,
+        test_credential_without_optional,
     )
-    assert cred.token == "ghp_xxx"
-    assert cred.target == "github.com"
-    assert cred.expires_at is not None
-    assert cred.expires_at.year == 2026
-
-    # Credential without expires_at and metadata
-    cred2 = Credential(token="x", target="y")
-    assert cred2.expires_at is None
-    assert cred2.metadata is None
 
 
 if __name__ == "__main__":

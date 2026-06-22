@@ -160,111 +160,141 @@ def _main() -> None:
     import asyncio
     import os
     import tempfile
+    from pathlib import Path
 
     if shutil.which("uv") is None:
-        logger.info("uv not on PATH; skipping uv pkg tests")
+        from pyxen._testlib import skip
+        skip("uv not on PATH")
         return
 
-    async def go() -> None:
-        # Build with empty config — defaults to requirements.txt
+    from pyxen._testlib import arun_tests
+
+    async def _run_tests() -> None:
         impl = build({})
-        snap = await impl.snapshot()
-        assert isinstance(snap.packages, list)
-        assert snap.timestamp > 0
-        # pyxen itself should be installed in the dev venv
-        names = {p.name.lower() for p in snap.packages}
-        assert "pyxen" in names, f"pyxen not in uv pip list: {names}"
+        try:
+            async def test_snapshot_returns_list() -> None:
+                snap = await impl.snapshot()
+                assert isinstance(snap.packages, list)
+                assert snap.timestamp > 0
 
-        # Snapshot returns PackageInfo with name, version, source
-        for pkg in snap.packages:
-            assert isinstance(pkg.name, str) and pkg.name
-            assert isinstance(pkg.version, str) and pkg.version
-            assert pkg.source == "uv"
+            async def test_pyxen_in_names() -> None:
+                snap = await impl.snapshot()
+                names = {p.name.lower() for p in snap.packages}
+                assert "pyxen" in names, f"pyxen not in uv pip list: {names}"
 
-        # ensure_python with empty list is a no-op
-        await impl.ensure_python([])
+            async def test_package_info_shape() -> None:
+                snap = await impl.snapshot()
+                for pkg in snap.packages:
+                    assert isinstance(pkg.name, str) and pkg.name
+                    assert isinstance(pkg.version, str) and pkg.version
+                    assert pkg.source == "uv"
 
-        # ensure_from_manifest on a missing file is a no-op
-        await impl.ensure_from_manifest("/nonexistent/requirements.txt")
+            async def test_ensure_python_empty() -> None:
+                await impl.ensure_python([])
 
-        # _parse_requirements: comments, blank lines, -r includes, extras, comparisons
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "reqs.txt"
-            f.write_text(
-                "# comment line\n"
-                "\n"
-                "numpy>=2.0\n"
-                "pandas == 2.2.1\n"
-                "httpx[socks]>=0.27\n"
-                "-r other.txt\n"
+            async def test_ensure_from_manifest_missing() -> None:
+                await impl.ensure_from_manifest("/nonexistent/requirements.txt")
+
+            async def test_parse_requirements_comments_and_extras() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    f = Path(tmp) / "reqs.txt"
+                    f.write_text(
+                        "# comment line\n"
+                        "\n"
+                        "numpy>=2.0\n"
+                        "pandas == 2.2.1\n"
+                        "httpx[socks]>=0.27\n"
+                        "-r other.txt\n"
+                    )
+                    parsed = UvPkg._parse_requirements(f)
+                    assert parsed == ["numpy", "pandas", "httpx"], parsed
+
+            async def test_parse_requirements_plain_exact_min() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    f = Path(tmp) / "reqs2.txt"
+                    f.write_text("requests\nflask==3.0.0\ndjango>=5.0\n")
+                    parsed2 = UvPkg._parse_requirements(f)
+                    assert parsed2 == ["requests", "flask", "django"], parsed2
+
+            async def test_parse_requirements_whitespace_inline_comment() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    f = Path(tmp) / "reqs3.txt"
+                    f.write_text("  numpy >= 2.0  \n  # inline comment\ntorch\n")
+                    parsed3 = UvPkg._parse_requirements(f)
+                    assert parsed3 == ["numpy", "torch"], parsed3
+
+            async def test_parse_requirements_empty_file() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    f = Path(tmp) / "empty.txt"
+                    f.write_text("")
+                    parsed4 = UvPkg._parse_requirements(f)
+                    assert parsed4 == [], parsed4
+
+            async def test_verify_checks_installed() -> None:
+                result = await impl.verify()
+                assert isinstance(result.satisfied, bool)
+
+            async def test_verify_nonexistent_file() -> None:
+                impl_none = build({"requirements": "/nonexistent/requirements.txt"})
+                result_none = await impl_none.verify()
+                assert result_none.satisfied
+
+            async def test_verify_with_real_file() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    req_path = Path(tmp) / "requirements.txt"
+                    req_path.write_text("pyxen\n")
+                    impl_tmp = build({"requirements": str(req_path)})
+                    result_tmp = await impl_tmp.verify()
+                    assert result_tmp.satisfied, f"pyxen should be installed: missing={result_tmp.missing}"
+
+            async def test_verify_detects_missing_package() -> None:
+                with tempfile.TemporaryDirectory() as tmp:
+                    req_path = Path(tmp) / "missing_req.txt"
+                    req_path.write_text("completely_nonexistent_package_xyz\n")
+                    impl_missing = build({"requirements": str(req_path)})
+                    result_missing = await impl_missing.verify()
+                    assert result_missing.satisfied is False
+                    assert "completely_nonexistent_package_xyz" in result_missing.missing
+
+            async def test_install_tests() -> None:
+                if os.environ.get("PYXEN_UV_INSTALL_TEST"):
+                    await impl.ensure_python(["six"])
+                    snap2 = await impl.snapshot()
+                    names2 = {p.name.lower() for p in snap2.packages}
+                    assert "six" in names2, f"six should be installed: {names2}"
+
+                    with tempfile.TemporaryDirectory() as tmp:
+                        req_path = Path(tmp) / "requirements.txt"
+                        req_path.write_text("six\n")
+                        await impl.ensure_from_manifest(str(req_path))
+
+            await arun_tests(
+                test_snapshot_returns_list,
+                test_pyxen_in_names,
+                test_package_info_shape,
+                test_ensure_python_empty,
+                test_ensure_from_manifest_missing,
+                test_parse_requirements_comments_and_extras,
+                test_parse_requirements_plain_exact_min,
+                test_parse_requirements_whitespace_inline_comment,
+                test_parse_requirements_empty_file,
+                test_verify_checks_installed,
+                test_verify_nonexistent_file,
+                test_verify_with_real_file,
+                test_verify_detects_missing_package,
+                test_install_tests,
             )
-            parsed = UvPkg._parse_requirements(f)
-            assert parsed == ["numpy", "pandas", "httpx"], parsed
+        finally:
+            pass
 
-        # _parse_requirements: plain name, exact version, min version
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "reqs2.txt"
-            f.write_text("requests\nflask==3.0.0\ndjango>=5.0\n")
-            parsed2 = UvPkg._parse_requirements(f)
-            assert parsed2 == ["requests", "flask", "django"], parsed2
+    asyncio.run(_run_tests())
 
-        # _parse_requirements: mixed whitespace, inline comment
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "reqs3.txt"
-            f.write_text("  numpy >= 2.0  \n  # inline comment\ntorch\n")
-            parsed3 = UvPkg._parse_requirements(f)
-            assert parsed3 == ["numpy", "torch"], parsed3
+    def test_bad_config() -> None:
+        impl_bad = build({"uv_path": "/nonexistent/uv"})
+        assert isinstance(impl_bad, UvPkg)
 
-        # _parse_requirements: empty file
-        with tempfile.TemporaryDirectory() as tmp:
-            f = Path(tmp) / "empty.txt"
-            f.write_text("")
-            parsed4 = UvPkg._parse_requirements(f)
-            assert parsed4 == [], parsed4
-
-        # verify() checks installed vs requirements
-        result = await impl.verify()
-        assert isinstance(result.satisfied, bool)
-
-        # verify() with explicit non-existent requirements file
-        impl_none = build({"requirements": "/nonexistent/requirements.txt"})
-        result_none = await impl_none.verify()
-        assert result_none.satisfied
-
-        # verify() with a real requirements file in tmp dir
-        with tempfile.TemporaryDirectory() as tmp:
-            req_path = Path(tmp) / "requirements.txt"
-            req_path.write_text("pyxen\n")
-            impl_tmp = build({"requirements": str(req_path)})
-            result_tmp = await impl_tmp.verify()
-            assert result_tmp.satisfied, f"pyxen should be installed: missing={result_tmp.missing}"
-
-        # verify() that detects a missing package
-        with tempfile.TemporaryDirectory() as tmp:
-            req_path = Path(tmp) / "missing_req.txt"
-            req_path.write_text("completely_nonexistent_package_xyz\n")
-            impl_missing = build({"requirements": str(req_path)})
-            result_missing = await impl_missing.verify()
-            assert result_missing.satisfied is False
-            assert "completely_nonexistent_package_xyz" in result_missing.missing
-
-        # ensure_python and ensure_from_manifest with real install (skip unless env var set)
-        if os.environ.get("PYXEN_UV_INSTALL_TEST"):
-            await impl.ensure_python(["six"])
-            snap2 = await impl.snapshot()
-            names2 = {p.name.lower() for p in snap2.packages}
-            assert "six" in names2, f"six should be installed: {names2}"
-
-            with tempfile.TemporaryDirectory() as tmp:
-                req_path = Path(tmp) / "requirements.txt"
-                req_path.write_text("six\n")
-                await impl.ensure_from_manifest(str(req_path))
-
-    asyncio.run(go())
-
-    # Bad config doesn't raise (empty dict is valid)
-    impl_bad = build({"uv_path": "/nonexistent/uv"})
-    assert isinstance(impl_bad, UvPkg)
+    from pyxen._testlib import run_tests
+    run_tests(test_bad_config)
 
 
 if __name__ == "__main__":

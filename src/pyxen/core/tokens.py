@@ -57,48 +57,62 @@ class TokensImpl(Protocol):
 
 
 def _main() -> None:
-    """Test entry point for this module."""
-    # --- Budget dataclass ---
-    b = Budget(daily_limit=100, spent=30)
-    assert b.spent == 30
-    assert b.remaining == 70
+    from pyxen._testlib import run_tests
 
-    # Spent can exceed daily_limit; remaining clamps at 0
-    b_over = Budget(daily_limit=100, spent=200)
-    assert b_over.remaining == 0
-    assert b_over.remaining == max(0, b_over.daily_limit - b_over.spent)
+    def test_budget_normal() -> None:
+        b = Budget(daily_limit=100, spent=30)
+        assert b.spent == 30
+        assert b.remaining == 70
 
-    # Edge: spent == daily_limit
-    b_edge = Budget(daily_limit=100, spent=100)
-    assert b_edge.remaining == 0
+    def test_budget_over_limit() -> None:
+        b_over = Budget(daily_limit=100, spent=200)
+        assert b_over.remaining == 0
+        assert b_over.remaining == max(0, b_over.daily_limit - b_over.spent)
 
-    # Edge: spent == 0
-    b_zero = Budget(daily_limit=100, spent=0)
-    assert b_zero.remaining == 100
+    def test_budget_spent_equals_limit() -> None:
+        b_edge = Budget(daily_limit=100, spent=100)
+        assert b_edge.remaining == 0
 
-    # --- CheckResult ---
-    cr_ok = CheckResult(allowed=True, remaining=50)
-    assert cr_ok.allowed is True
-    assert cr_ok.remaining == 50
-    assert cr_ok.reason is None
-    assert cr_ok.budget is None
+    def test_budget_spent_zero() -> None:
+        b_zero = Budget(daily_limit=100, spent=0)
+        assert b_zero.remaining == 100
 
-    cr_fail = CheckResult(allowed=False, remaining=0, reason="over daily budget")
-    assert cr_fail.allowed is False
-    assert cr_fail.remaining == 0
-    assert cr_fail.reason == "over daily budget"
+    def test_checkresult_ok() -> None:
+        cr_ok = CheckResult(allowed=True, remaining=50)
+        assert cr_ok.allowed is True
+        assert cr_ok.remaining == 50
+        assert cr_ok.reason is None
+        assert cr_ok.budget is None
 
-    cr_with_budget = CheckResult(
-        allowed=True, remaining=20, reason=None, budget=Budget(daily_limit=100, spent=80)
+    def test_checkresult_fail() -> None:
+        cr_fail = CheckResult(allowed=False, remaining=0, reason="over daily budget")
+        assert cr_fail.allowed is False
+        assert cr_fail.remaining == 0
+        assert cr_fail.reason == "over daily budget"
+
+    def test_checkresult_with_budget() -> None:
+        cr_with_budget = CheckResult(
+            allowed=True, remaining=20, reason=None, budget=Budget(daily_limit=100, spent=80)
+        )
+        assert cr_with_budget.budget is not None
+        assert cr_with_budget.budget.remaining == 20
+
+    def test_charge() -> None:
+        c = Charge(model="gpt-4o", tokens=1500, dollars=0.045)
+        assert c.model == "gpt-4o"
+        assert c.tokens == 1500
+        assert c.dollars == 0.045
+
+    run_tests(
+        test_budget_normal,
+        test_budget_over_limit,
+        test_budget_spent_equals_limit,
+        test_budget_spent_zero,
+        test_checkresult_ok,
+        test_checkresult_fail,
+        test_checkresult_with_budget,
+        test_charge,
     )
-    assert cr_with_budget.budget is not None
-    assert cr_with_budget.budget.remaining == 20
-
-    # --- Charge ---
-    c = Charge(model="gpt-4o", tokens=1500, dollars=0.045)
-    assert c.model == "gpt-4o"
-    assert c.tokens == 1500
-    assert c.dollars == 0.045
 
 
 if __name__ == "__main__":

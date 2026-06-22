@@ -121,41 +121,51 @@ def build(config: dict[str, object]) -> OpenAITracingObservability:
 def _main() -> None:
     """Test entry point for the openai_tracing impl. Skips if SDK not installed."""
     if not _HAS_OPENAI_TRACING:
-        # Verify build() raises a clear error
         try:
             build({})
         except RuntimeError as e:
             assert "openai-agents" in str(e)
         else:
             raise AssertionError("build() should raise when openai-agents missing")
+        from pyxen._testlib import skip
+        skip("openai-agents not installed")
         return
 
-    # OpenAI SDK is installed. Exercise the impl.
     import asyncio
 
-    async def go() -> None:
+    from pyxen._testlib import arun_tests
+
+    async def _run_tests() -> None:
         obs = build({})
-        async with obs.trace("test-span") as span:
-            # set_attribute: should not raise
-            span.set_attribute("user", "alice")
-            span.set_attribute("count", 42)
-            # log: should not raise
-            span.log("info", "starting work", extra="x")
-            span.log("warn", "something happened", code=500)
-
-        # Nested spans
-        async with obs.trace("outer"), obs.trace("inner") as inner:
-            inner.set_attribute("nested", True)
-
-        # Span inside an exception still closes
         try:
-            async with obs.trace("error-span") as span:
-                span.set_attribute("op", "test")
-                raise ValueError("boom")
-        except ValueError:
+            async def test_set_attribute_and_log() -> None:
+                async with obs.trace("test-span") as span:
+                    span.set_attribute("user", "alice")
+                    span.set_attribute("count", 42)
+                    span.log("info", "starting work", extra="x")
+                    span.log("warn", "something happened", code=500)
+
+            async def test_nested_spans() -> None:
+                async with obs.trace("outer"), obs.trace("inner") as inner:
+                    inner.set_attribute("nested", True)
+
+            async def test_error_inside_span() -> None:
+                try:
+                    async with obs.trace("error-span") as span:
+                        span.set_attribute("op", "test")
+                        raise ValueError("boom")
+                except ValueError:
+                    pass
+
+            await arun_tests(
+                test_set_attribute_and_log,
+                test_nested_spans,
+                test_error_inside_span,
+            )
+        finally:
             pass
 
-    asyncio.run(go())
+    asyncio.run(_run_tests())
 
 
 if __name__ == "__main__":

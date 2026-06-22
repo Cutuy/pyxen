@@ -23,8 +23,6 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
-from pyxen._testlib import skip
-
 try:
     from agents.usage import Usage
     _HAS_OPENAI = True
@@ -132,35 +130,48 @@ def _main() -> None:
     import asyncio
     import tempfile
 
-    async def go() -> None:
+    from pyxen._testlib import skip
+
+    async def _run_tests() -> None:
+        from pyxen._testlib import arun_tests
+
         with tempfile.TemporaryDirectory() as tmp:
             log_path = str(Path(tmp) / "usage.json")
-            
-            # 1. Initial check
             t = build({"path": log_path, "daily_limit": 1000})
-            res = await t.check("gpt-4o", 100)
-            assert res["allowed"] is True
-            assert res["current_usage"]["total"] == 0
 
-            # 2. Consume some
-            await t.consume("gpt-4o", input_tokens=50, output_tokens=50)
-            
-            # 3. Check again
-            res2 = await t.check("gpt-4o", 100)
-            assert res2["current_usage"]["total"] == 100
-            assert res2["remaining"] == 900
-            
-            # 4. Persistence check (re-load)
-            t2 = build({"path": log_path, "daily_limit": 1000})
-            res3 = await t2.check("gpt-4o", 0)
-            assert res3["current_usage"]["total"] == 100
+            async def test_initial_check() -> None:
+                res = await t.check("gpt-4o", 100)
+                assert res["allowed"] is True
+                assert res["current_usage"]["total"] == 0
 
-            # 5. Limit enforcement
-            res4 = await t2.check("gpt-4o", 1000)
-            assert res4["allowed"] is False
+            async def test_consume() -> None:
+                await t.consume("gpt-4o", input_tokens=50, output_tokens=50)
+
+            async def test_check_again() -> None:
+                res2 = await t.check("gpt-4o", 100)
+                assert res2["current_usage"]["total"] == 100
+                assert res2["remaining"] == 900
+
+            async def test_persistence_reload() -> None:
+                t2 = build({"path": log_path, "daily_limit": 1000})
+                res3 = await t2.check("gpt-4o", 0)
+                assert res3["current_usage"]["total"] == 100
+
+            async def test_limit_enforcement() -> None:
+                t2 = build({"path": log_path, "daily_limit": 1000})
+                res4 = await t2.check("gpt-4o", 1000)
+                assert res4["allowed"] is False
+
+            await arun_tests(
+                test_initial_check,
+                test_consume,
+                test_check_again,
+                test_persistence_reload,
+                test_limit_enforcement,
+            )
 
     if _HAS_OPENAI:
-        asyncio.run(go())
+        asyncio.run(_run_tests())
     else:
         skip("openai-agents not installed")
 

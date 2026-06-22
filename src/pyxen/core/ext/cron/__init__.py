@@ -215,47 +215,29 @@ def _sh_quote(s: str) -> str:
 
 def _main() -> None:
     """Unit tests for the cron extension init logic."""
+    from pyxen._testlib import run_tests, arun_tests
     import asyncio
-    import json
     import tempfile
 
-    async def go() -> None:
-        # init with empty config returns None
-        ext = await init({}, None)
-        assert ext is None
-
-        # init with no jobs returns None
-        ext2 = await init({"jobs": []}, None)
-        assert ext2 is None
-
-        # init creates CronExtension when crontab available
-        ext3 = await init({"jobs": [{"name": "t", "command": "echo hi", "schedule": "* * * * *"}]}, Path("/tmp"))
-        # ext3 may be None if no crontab on this machine
-        if ext3 is not None:
-            jobs = await ext3.list()
-            assert len(jobs) == 1
-            assert jobs[0].name == "t"
-            await ext3.unschedule("t")
-
-        # _resolve_cron_command replaces {APP_DIR}
+    def test_resolve_cron_command() -> None:
         src_dir = Path(__file__).resolve().parent
         job_in = CronJob(name="t", command="bash {APP_DIR}/scripts/t.sh", schedule="* * * * *")
         job_out = _resolve_cron_command(job_in, src_dir)
         assert "{APP_DIR}" not in job_out.command
         assert str(src_dir) in job_out.command
 
-        # _wrap_with_state_recording wraps the command
+    def test_wrap_with_state_recording() -> None:
         job_raw = CronJob(name="test-job", command="/usr/bin/backup.sh", schedule="0 3 * * *")
         wrapped = _wrap_with_state_recording(job_raw, Path("/tmp/state.jsonl"))
         assert "pyxen.core.ext.cron.record" in wrapped.command
         assert "/usr/bin/backup.sh" in wrapped.command
         assert wrapped.schedule == job_raw.schedule
 
-        # _sh_quote handles simple and tricky strings
+    def test_sh_quote() -> None:
         assert _sh_quote("hello") == "'hello'"
         assert _sh_quote("it's") == "'it'\\''s'"
 
-        # _make_state_store uses custom path from config
+    def test_make_state_store() -> None:
         with tempfile.TemporaryDirectory() as tmp:
             app_dir = Path(tmp)
             s1 = _make_state_store({}, app_dir)
@@ -269,7 +251,34 @@ def _main() -> None:
             s3 = _make_state_store({}, None)
             assert s3 is None
 
-    asyncio.run(go())
+    run_tests(
+        test_resolve_cron_command,
+        test_wrap_with_state_recording,
+        test_sh_quote,
+        test_make_state_store,
+    )
+
+    async def test_init_with_empty_config() -> None:
+        ext = await init({}, None)
+        assert ext is None
+
+    async def test_init_with_no_jobs() -> None:
+        ext2 = await init({"jobs": []}, None)
+        assert ext2 is None
+
+    async def test_init_creates_extension() -> None:
+        ext3 = await init({"jobs": [{"name": "t", "command": "echo hi", "schedule": "* * * * *"}]}, Path("/tmp"))
+        if ext3 is not None:
+            jobs = await ext3.list()
+            assert len(jobs) == 1
+            assert jobs[0].name == "t"
+            await ext3.unschedule("t")
+
+    asyncio.run(arun_tests(
+        test_init_with_empty_config,
+        test_init_with_no_jobs,
+        test_init_creates_extension,
+    ))
 
 
 if __name__ == "__main__":

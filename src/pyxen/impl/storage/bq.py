@@ -33,10 +33,9 @@ import os
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Awaitable
 from typing import Any
 
-from ..._testlib import atest, skip, summary
+
 from ...core.errors import StorageError
 from ...core.manifest import SECRET_REF_KEY
 from ...core.observability import ObservabilityImpl
@@ -329,6 +328,7 @@ def _main() -> None:
     """
     import asyncio
     import secrets as _secrets_mod
+    from pyxen._testlib import atest_fn, skip, summary
 
     bq = shutil.which("bq")
     if bq is None:
@@ -382,86 +382,86 @@ def _main() -> None:
         skip(f"failed to create table: {r.stderr.strip()}")
         return
 
+    s = build({"project": project, "dataset": dataset, "table": table})
+
+    async def test_put_get(s: BqStorage) -> None:
+        await s.put("ns", "k", {"v": 1, "name": "alice"})
+        got = await s.get("ns", "k")
+        assert got == {"v": 1, "name": "alice"}, f"got {got}"
+
+    async def test_overwrite(s: BqStorage) -> None:
+        await s.put("ns", "k", {"v": 2})
+        assert await s.get("ns", "k") == {"v": 2}
+
+    async def test_missing(s: BqStorage) -> None:
+        assert await s.get("ns", "missing") is None
+        assert await s.get("nonexistent", "k") is None
+
+    async def test_empty_value(s: BqStorage) -> None:
+        await s.put("ns", "empty", {})
+        assert await s.get("ns", "empty") == {}
+
+    async def test_nested(s: BqStorage) -> None:
+        await s.put("ns", "nested", {"a": {"b": {"c": [1, 2, 3]}}})
+        assert await s.get("ns", "nested") == {"a": {"b": {"c": [1, 2, 3]}}}
+
+    async def test_query_all(s: BqStorage) -> None:
+        await s.put("ns", "qa", {"v": 1})
+        await s.put("ns", "qb", {"v": 2})
+        await s.put("ns", "qc", {"v": 3})
+        results = await s.query("ns")
+        assert len(results) >= 3
+
+    async def test_query_filter(s: BqStorage) -> None:
+        await s.put("ns", "x1", {"tag": "red", "n": 1})
+        await s.put("ns", "x2", {"tag": "red", "n": 2})
+        await s.put("ns", "x3", {"tag": "blue", "n": 3})
+        red = await s.query("ns", QueryFilter(equals={"tag": "red"}))
+        assert all(r["tag"] == "red" for r in red)
+        assert len(red) == 2
+
+    async def test_query_limit(s: BqStorage) -> None:
+        first_two = await s.query("ns", QueryFilter(limit=2))
+        assert len(first_two) == 2
+
+    async def test_namespace_isolation(s: BqStorage) -> None:
+        await s.put("other", "k", {"v": 99})
+        other = await s.query("other")
+        assert len(other) == 1
+        assert other[0]["v"] == 99
+
+    async def test_delete_existing(s: BqStorage) -> None:
+        assert await s.delete("ns", "qa") is True
+        assert await s.get("ns", "qa") is None
+
+    async def test_delete_missing(s: BqStorage) -> None:
+        assert await s.delete("ns", "missing_xyz") is False
+        assert await s.delete("nonexistent", "k") is False
+
+    async def _run_tests() -> None:
+        passed = 0
+        failed = 0
+        tests = [
+            test_put_get,
+            test_overwrite,
+            test_missing,
+            test_empty_value,
+            test_nested,
+            test_query_all,
+            test_query_filter,
+            test_query_limit,
+            test_namespace_isolation,
+            test_delete_existing,
+            test_delete_missing,
+        ]
+        for fn in tests:
+            if await atest_fn(fn, s):
+                passed += 1
+            else:
+                failed += 1
+        summary(passed, failed)
+
     try:
-        s = build({"project": project, "dataset": dataset, "table": table})
-
-        async def test_put_get(s: BqStorage) -> None:
-            await s.put("ns", "k", {"v": 1, "name": "alice"})
-            got = await s.get("ns", "k")
-            assert got == {"v": 1, "name": "alice"}, f"got {got}"
-
-        async def test_overwrite(s: BqStorage) -> None:
-            await s.put("ns", "k", {"v": 2})
-            assert await s.get("ns", "k") == {"v": 2}
-
-        async def test_missing(s: BqStorage) -> None:
-            assert await s.get("ns", "missing") is None
-            assert await s.get("nonexistent", "k") is None
-
-        async def test_empty_value(s: BqStorage) -> None:
-            await s.put("ns", "empty", {})
-            assert await s.get("ns", "empty") == {}
-
-        async def test_nested(s: BqStorage) -> None:
-            await s.put("ns", "nested", {"a": {"b": {"c": [1, 2, 3]}}})
-            assert await s.get("ns", "nested") == {"a": {"b": {"c": [1, 2, 3]}}}
-
-        async def test_query_all(s: BqStorage) -> None:
-            await s.put("ns", "qa", {"v": 1})
-            await s.put("ns", "qb", {"v": 2})
-            await s.put("ns", "qc", {"v": 3})
-            results = await s.query("ns")
-            assert len(results) >= 3
-
-        async def test_query_filter(s: BqStorage) -> None:
-            await s.put("ns", "x1", {"tag": "red", "n": 1})
-            await s.put("ns", "x2", {"tag": "red", "n": 2})
-            await s.put("ns", "x3", {"tag": "blue", "n": 3})
-            red = await s.query("ns", QueryFilter(equals={"tag": "red"}))
-            assert all(r["tag"] == "red" for r in red)
-            assert len(red) == 2
-
-        async def test_query_limit(s: BqStorage) -> None:
-            first_two = await s.query("ns", QueryFilter(limit=2))
-            assert len(first_two) == 2
-
-        async def test_namespace_isolation(s: BqStorage) -> None:
-            await s.put("other", "k", {"v": 99})
-            other = await s.query("other")
-            assert len(other) == 1
-            assert other[0]["v"] == 99
-
-        async def test_delete_existing(s: BqStorage) -> None:
-            assert await s.delete("ns", "qa") is True
-            assert await s.get("ns", "qa") is None
-
-        async def test_delete_missing(s: BqStorage) -> None:
-            assert await s.delete("ns", "missing_xyz") is False
-            assert await s.delete("nonexistent", "k") is False
-
-        async def _run_tests() -> None:
-            passed = 0
-            failed = 0
-            cases: list[tuple[str, Awaitable[Any]]] = [
-                ("put/get", test_put_get(s)),
-                ("overwrite", test_overwrite(s)),
-                ("missing returns None", test_missing(s)),
-                ("empty value", test_empty_value(s)),
-                ("nested values", test_nested(s)),
-                ("query all", test_query_all(s)),
-                ("query filter", test_query_filter(s)),
-                ("query limit", test_query_limit(s)),
-                ("namespace isolation", test_namespace_isolation(s)),
-                ("delete existing", test_delete_existing(s)),
-                ("delete missing", test_delete_missing(s)),
-            ]
-            for name, coro in cases:
-                if await atest(name, coro):
-                    passed += 1
-                else:
-                    failed += 1
-            summary(passed, failed)
-
         asyncio.run(_run_tests())
     finally:
         asyncio.run(asyncio.to_thread(

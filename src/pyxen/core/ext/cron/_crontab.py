@@ -148,49 +148,65 @@ async def _crontab_remove_marker(marker: str) -> None:
 
 
 def _main() -> None:
+    from pyxen._testlib import run_tests, arun_tests
     import asyncio
 
-    entry = _parse_entry(
-        "0 9 * * * /usr/bin/backup.sh # pyxen:backup"
+    def test_parse_entry_backup() -> None:
+        entry = _parse_entry(
+            "0 9 * * * /usr/bin/backup.sh # pyxen:backup"
+        )
+        assert entry is not None
+        assert entry.name == "backup"
+        assert entry.schedule == "0 9 * * *"
+        assert entry.command == "/usr/bin/backup.sh"
+        assert entry.enabled is True
+
+    def test_parse_entry_greeting() -> None:
+        entry2 = _parse_entry(
+            "*/5 * * * * echo hi # pyxen:greet"
+        )
+        assert entry2 is not None
+        assert entry2.schedule == "*/5 * * * *"
+        assert entry2.command == "echo hi"
+
+    def test_parse_entry_ls() -> None:
+        entry3 = _parse_entry(
+            "0 9 * * 1 /bin/ls -la /tmp # pyxen:cleanup"
+        )
+        assert entry3 is not None
+        assert entry3.command == "/bin/ls -la /tmp"
+
+    def test_parse_entry_daily() -> None:
+        entry4 = _parse_entry(
+            "@daily /bin/run.sh # pyxen:daily_task"
+        )
+        assert entry4 is not None
+        assert entry4.schedule == "@daily"
+        assert entry4.command == "/bin/run.sh"
+
+    def test_parse_entry_none() -> None:
+        assert _parse_entry("# comment") is None
+        assert _parse_entry("") is None
+        assert _parse_entry("no marker here") is None
+
+    def test_probe_return_type() -> None:
+        result = probe()
+        assert isinstance(result, bool)
+
+    run_tests(
+        test_parse_entry_backup,
+        test_parse_entry_greeting,
+        test_parse_entry_ls,
+        test_parse_entry_daily,
+        test_parse_entry_none,
+        test_probe_return_type,
     )
-    assert entry is not None
-    assert entry.name == "backup"
-    assert entry.schedule == "0 9 * * *"
-    assert entry.command == "/usr/bin/backup.sh"
-    assert entry.enabled is True
 
-    entry2 = _parse_entry(
-        "*/5 * * * * echo hi # pyxen:greet"
-    )
-    assert entry2 is not None
-    assert entry2.schedule == "*/5 * * * *"
-    assert entry2.command == "echo hi"
-
-    entry3 = _parse_entry(
-        "0 9 * * 1 /bin/ls -la /tmp # pyxen:cleanup"
-    )
-    assert entry3 is not None
-    assert entry3.command == "/bin/ls -la /tmp"
-
-    entry4 = _parse_entry(
-        "@daily /bin/run.sh # pyxen:daily_task"
-    )
-    assert entry4 is not None
-    assert entry4.schedule == "@daily"
-    assert entry4.command == "/bin/run.sh"
-
-    assert _parse_entry("# comment") is None
-    assert _parse_entry("") is None
-    assert _parse_entry("no marker here") is None
-
-    result = probe()
-    assert isinstance(result, bool)
-
-    async def go() -> None:
+    async def test_status_nonexistent() -> None:
         s = await status("nonexistent")
         assert s is None
 
-    asyncio.run(go())
+    asyncio.run(arun_tests(test_status_nonexistent))
 
 
 if __name__ == "__main__":

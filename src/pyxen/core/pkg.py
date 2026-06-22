@@ -90,67 +90,82 @@ class PkgImpl(Protocol):
 
 
 def _main() -> None:
-    """Test entry point for this module.
+    from pyxen._testlib import run_tests
 
-    Verifies the protocol shape and the dataclass invariants.
-    """
-    # Protocol shape
-    assert hasattr(PkgImpl, "ensure")
-    assert hasattr(PkgImpl, "verify")
-    assert hasattr(PkgImpl, "snapshot")
-    assert hasattr(PkgImpl, "ensure_python")
-    assert hasattr(PkgImpl, "ensure_from_manifest")
-    bases_names = {getattr(b, "__name__", "") for b in PkgImpl.__bases__}
-    assert "Protocol" in bases_names or hasattr(PkgImpl, "_is_protocol")
+    def test_pkgimpl_protocol_shape() -> None:
+        assert hasattr(PkgImpl, "ensure")
+        assert hasattr(PkgImpl, "verify")
+        assert hasattr(PkgImpl, "snapshot")
+        assert hasattr(PkgImpl, "ensure_python")
+        assert hasattr(PkgImpl, "ensure_from_manifest")
+        bases_names = {getattr(b, "__name__", "") for b in PkgImpl.__bases__}
+        assert "Protocol" in bases_names or hasattr(PkgImpl, "_is_protocol")
 
-    # Dataclass round-trips
-    pkg = PackageInfo(name="numpy", version="2.1.0", source="pip")
-    assert pkg.name == "numpy"
-    assert pkg.version == "2.1.0"
-    assert pkg.source == "pip"
+    def test_packageinfo_dataclass() -> None:
+        pkg = PackageInfo(name="numpy", version="2.1.0", source="pip")
+        assert pkg.name == "numpy"
+        assert pkg.version == "2.1.0"
+        assert pkg.source == "pip"
 
-    snap = Snapshot(packages=[pkg], timestamp=1719000000.0)
-    assert len(snap.packages) == 1
-    assert snap.timestamp == 1719000000.0
+    def test_snapshot_normal() -> None:
+        pkg = PackageInfo(name="numpy", version="2.1.0", source="pip")
+        snap = Snapshot(packages=[pkg], timestamp=1719000000.0)
+        assert len(snap.packages) == 1
+        assert snap.timestamp == 1719000000.0
 
-    # Empty packages list
-    empty_snap = Snapshot(packages=[], timestamp=0.0)
-    assert empty_snap.packages == []
-    assert empty_snap.timestamp == 0.0
+    def test_snapshot_empty() -> None:
+        empty_snap = Snapshot(packages=[], timestamp=0.0)
+        assert empty_snap.packages == []
+        assert empty_snap.timestamp == 0.0
 
-    result = VerificationResult(satisfied=True, missing=[])
-    assert result.satisfied is True
-    assert result.missing == []
+    def test_verificationresult_satisfied() -> None:
+        result = VerificationResult(satisfied=True, missing=[])
+        assert result.satisfied is True
+        assert result.missing == []
 
-    fail = VerificationResult(satisfied=False, missing=["numpy", "pandas"])
-    assert fail.satisfied is False
-    assert fail.missing == ["numpy", "pandas"]
+    def test_verificationresult_fail() -> None:
+        fail = VerificationResult(satisfied=False, missing=["numpy", "pandas"])
+        assert fail.satisfied is False
+        assert fail.missing == ["numpy", "pandas"]
 
-    # Dataclass equality by value (not identity)
-    s1 = Snapshot(packages=[PackageInfo("a", "1", "pip")], timestamp=100.0)
-    s2 = Snapshot(packages=[PackageInfo("a", "1", "pip")], timestamp=100.0)
-    assert s1 == s2
-    s3 = Snapshot(packages=[PackageInfo("a", "2", "pip")], timestamp=100.0)
-    assert s1 != s3
+    def test_snapshot_equality() -> None:
+        s1 = Snapshot(packages=[PackageInfo("a", "1", "pip")], timestamp=100.0)
+        s2 = Snapshot(packages=[PackageInfo("a", "1", "pip")], timestamp=100.0)
+        assert s1 == s2
+        s3 = Snapshot(packages=[PackageInfo("a", "2", "pip")], timestamp=100.0)
+        assert s1 != s3
 
-    # PackageInfo equality
-    p1 = PackageInfo("a", "1", "pip")
-    p2 = PackageInfo("a", "1", "pip")
-    p3 = PackageInfo("a", "2", "pip")
-    assert p1 == p2
-    assert p1 != p3
+    def test_packageinfo_equality() -> None:
+        p1 = PackageInfo("a", "1", "pip")
+        p2 = PackageInfo("a", "1", "pip")
+        p3 = PackageInfo("a", "2", "pip")
+        assert p1 == p2
+        assert p1 != p3
 
-    # VerificationResult equality
-    v1 = VerificationResult(satisfied=True, missing=[])
-    v2 = VerificationResult(satisfied=True, missing=[])
-    v3 = VerificationResult(satisfied=False, missing=["x"])
-    assert v1 == v2
-    assert v1 != v3
+    def test_verificationresult_equality() -> None:
+        v1 = VerificationResult(satisfied=True, missing=[])
+        v2 = VerificationResult(satisfied=True, missing=[])
+        v3 = VerificationResult(satisfied=False, missing=["x"])
+        assert v1 == v2
+        assert v1 != v3
 
-    # Protocol methods count
-    _protocol_methods = {"ensure", "verify", "snapshot", "ensure_python", "ensure_from_manifest"}
-    _pkg_attrs = {a for a in dir(PkgImpl) if not a.startswith("_") and callable(getattr(PkgImpl, a, None))}
-    assert _protocol_methods.issubset(_pkg_attrs), f"missing methods: {_protocol_methods - _pkg_attrs}"
+    def test_protocol_methods_count() -> None:
+        _protocol_methods = {"ensure", "verify", "snapshot", "ensure_python", "ensure_from_manifest"}
+        _pkg_attrs = {a for a in dir(PkgImpl) if not a.startswith("_") and callable(getattr(PkgImpl, a, None))}
+        assert _protocol_methods.issubset(_pkg_attrs), f"missing methods: {_protocol_methods - _pkg_attrs}"
+
+    run_tests(
+        test_pkgimpl_protocol_shape,
+        test_packageinfo_dataclass,
+        test_snapshot_normal,
+        test_snapshot_empty,
+        test_verificationresult_satisfied,
+        test_verificationresult_fail,
+        test_snapshot_equality,
+        test_packageinfo_equality,
+        test_verificationresult_equality,
+        test_protocol_methods_count,
+    )
 
 
 if __name__ == "__main__":
