@@ -454,8 +454,6 @@ def _main() -> None:
                 print(f"bq: {passed} passed — OK")
 
         asyncio.run(_run_tests())
-    except Exception as exc:
-        print(f"bq: SKIP ({exc})")
     finally:
         asyncio.run(asyncio.to_thread(
             _run, "rm", "-f", "--dataset", f"{project}:{dataset}"
