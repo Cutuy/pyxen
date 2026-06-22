@@ -63,6 +63,7 @@ Homepage = "https://github.com/Cutuy/pyxen"
 [project.scripts]
 pyxen = "pyxen._cli:main"
 pyxen-test = "pyxen.test:main"
+pyxen-test-integration = "pyxen.test_integration:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pyxen"]
