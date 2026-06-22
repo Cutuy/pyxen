@@ -59,6 +59,8 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/Cutuy/pyxen"
+Source = "https://github.com/Cutuy/pyxen"
+Tracker = "https://github.com/Cutuy/pyxen/issues"
 
 [project.scripts]
 pyxen = "pyxen._cli:main"
@@ -105,5 +107,3 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
-addopts = "-v --tb=short"
