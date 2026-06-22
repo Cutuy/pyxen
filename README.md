@@ -8,23 +8,24 @@ Agentic runtimes lock apps to themselves. pyxen flips this: 7 primitives (storag
 
 | Primitive | What it answers | Implementations |
 |---|---|---|
-| `identity` | Who's calling? | <br>- `env` — reads identity from environment variables.<br>- `keychain` — reads identity from macOS Keychain. |
-| `ipc` | Message another process | <br>- `a2a` — Agent-to-Agent protocol communication.<br>- `inproc` — async in-process message bus. |
-| `observability` | Emit a trace / log | <br>- `file` — structured JSON to a local log file.<br>- `null` — drop everything.<br>- `openai_tracing` — wraps the OpenAI Agents SDK tracing.<br>- `stdout` — structured JSON to stdout. |
-| `pkg` | Dependencies present? | <br>- `dry_run` — no-op for environments where dependencies are<br>- `pip` — delegates to ``pip`` for lock-file-first dependency<br>- `uv` — delegates to ``uv`` for lock-file-first dependency |
-| `secrets` | Get a credential | <br>- `dotenv` — reads from a ``.env`` file.<br>- `local_file` — secrets from a local JSON file. |
-| `storage` | Persist a record | <br>- `gcs` — Google Cloud Storage-backed key-value store.<br>- `inmemory` — dict-backed, for tests and fast iteration.<br>- `local_fs_mount` — mounts a directory tree as the storage namespace.<br>- `local_sqlite` — single-file SQLite backend.<br>- `redis` — key-value backed by Redis.<br>- `router` — namespace-routed multi-backend storage. |
-| `tokens` | Within LLM budget? | <br>- `json_budget` — soft budget with JSON file backing.<br>- `openai_usage` — structured token accounting using the OpenAI SDK. |
+| `identity` | Who's calling? | - `env` — reads identity from environment variables.<br>- `keychain` — reads identity from macOS Keychain. |
+| `ipc` | Message another process | - `a2a` — Agent-to-Agent protocol communication.<br>- `inproc` — async in-process message bus. |
+| `observability` | Emit a trace / log | - `file` — structured JSON to a local log file.<br>- `null` — drop everything.<br>- `openai_tracing` — wraps the OpenAI Agents SDK tracing.<br>- `stdout` — structured JSON to stdout. |
+| `pkg` | Dependencies present? | - `dry_run` — no-op for environments where dependencies are<br>- `pip` — delegates to ``pip`` for lock-file-first dependency<br>- `uv` — delegates to ``uv`` for lock-file-first dependency |
+| `secrets` | Get a credential | - `dotenv` — reads from a ``.env`` file.<br>- `local_file` — secrets from a local JSON file. |
+| `storage` | Persist a record | - `gcs` — Google Cloud Storage-backed key-value store.<br>- `inmemory` — dict-backed, for tests and fast iteration.<br>- `local_fs_mount` — mounts a directory tree as the storage namespace.<br>- `local_sqlite` — single-file SQLite backend.<br>- `redis` — key-value backed by Redis.<br>- `router` — namespace-routed multi-backend storage. |
+| `tokens` | Within LLM budget? | - `json_budget` — soft budget with JSON file backing.<br>- `openai_usage` — structured token accounting using the OpenAI SDK. |
 
 ## Extensions
 
 | Extension | What it adds | Implementations |
 |---|---|---|
-| `cron` | Schedule recurring tasks | <br>- `crontab` — Linux/macOS crontab backend.<br>- `windows` — Task Scheduler (`schtasks.exe`) backend.<br>- `state` — execution history (timestamps, exit codes) queryable via `rt.cron.status()`. |
+| `cron` | Schedule recurring tasks | - `crontab` — crontab backend.<br>- `windows` — windows backend.<br>- `state` — execution history (timestamps, exit codes) queryable via runtime extension API. |
 
 Extensions live under `pyxen.core.ext.*` and are initialized lazily from
 their section in `runtime.json`. They can be stateful and modify system
 state (e.g. the OS crontab).
+
 
 ## How it compares
 

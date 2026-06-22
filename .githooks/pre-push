@@ -16,7 +16,7 @@ fi
 
 PYTHONPATH="src:$PYTHONPATH"
 
-echo "→ updating README (impl table + examples + roadmap)..."
+echo "→ updating README (primitives + extensions + examples + roadmap)..."
 "$PYTHON" scripts/update-readme.py
 if git diff --quiet README.md; then
     echo "  README unchanged"

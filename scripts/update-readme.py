@@ -58,6 +58,13 @@ PRIMITIVE_QUESTIONS: dict[str, str] = {
 }
 
 
+# ── 1b. Extension metadata ───────────────────────────────────────────
+
+EXTENSION_QUESTIONS: dict[str, str] = {
+    "cron": "Schedule recurring tasks",
+}
+
+
 def discover_primitives() -> dict[str, dict[str, str]]:
     """Scan core/ for Protocol classes and return {name: {label, question}}."""
     result: dict[str, dict[str, str]] = {}
@@ -70,6 +77,65 @@ def discover_primitives() -> dict[str, dict[str, str]]:
 
 
 # ── 2. Discover implementations from impl/ ───────────────────────────
+
+# ── 1c. Discover extensions from core/ext/ ──────────────────────────
+
+def _discover_extension_backends(ext_dir: Path) -> list[dict[str, str]]:
+    """Scan an extension dir for backends (``_<name>.py``) and ``state.py``."""
+    backends: list[dict[str, str]] = []
+    for pyfile in sorted(ext_dir.glob("*.py")):
+        name = pyfile.name
+        # Include only: _<name>.py backends and state.py
+        # __init__.py starts with _ but is not a backend
+        if name == "__init__.py":
+            continue
+        if not (name.startswith("_") and name.endswith(".py")) and name != "state.py":
+            continue
+        display_name = name.removeprefix("_").removesuffix(".py")
+        doc = _first_doc_line(pyfile)
+        if not doc:
+            if name == "state.py":
+                doc = "execution history (timestamps, exit codes) queryable via runtime extension API."
+            elif name.startswith("_"):
+                doc = f"{display_name} backend."
+        backends.append({"name": display_name, "doc": doc})
+    return backends
+
+
+def discover_extensions() -> list[dict[str, Any]]:
+    """Scan ``core/ext/`` directories; return ``[{name, question, backends}]``."""
+    ext_dir = CORE_DIR / "ext"
+    if not ext_dir.is_dir():
+        return []
+    result: list[dict[str, Any]] = []
+    for entry in sorted(ext_dir.iterdir()):
+        if not entry.is_dir() or entry.name.startswith("_"):
+            continue
+        init_py = entry / "__init__.py"
+        if not init_py.exists():
+            continue
+
+        name = entry.name
+        question = EXTENSION_QUESTIONS.get(name, "")
+        if not question:
+            # Fallback: read first line of module docstring
+            try:
+                tree = ast.parse(init_py.read_text(encoding="utf-8"))
+                doc = ast.get_docstring(tree)
+                if doc:
+                    question = doc.split(".")[0].strip()
+            except Exception:
+                pass
+
+        backends = _discover_extension_backends(entry)
+
+        result.append({
+            "name": name,
+            "question": question,
+            "backends": backends,
+        })
+    return result
+
 
 def discover_impls() -> dict[str, list[dict[str, str]]]:
     """Scan impl/ directories and return {primitive: [{name, doc}]."""
@@ -177,7 +243,7 @@ def _extract_run_block(doc: str) -> str:
     return "\n".join(l[min_indent:] for l in lines).rstrip()
 
 
-# ── 3. Build the markdown table ──────────────────────────────────────
+# ── 3a. Build the primitive-impl table ──────────────────────────────
 
 def build_table(
     primitives: dict[str, dict[str, str]],
@@ -198,11 +264,38 @@ def build_table(
                 if i['doc']:
                     entry += f" — {i['doc']}"
                 items.append(f"- {entry}")
-            impl_col = "<br>" + "<br>".join(items)
+            impl_col = "<br>".join(items)
         else:
             impl_col = "—"
         lines.append(f"| `{label}` | {question} | {impl_col} |")
     return "\n".join(lines)
+
+
+# ── 3b. Build the extensions table ───────────────────────────────────
+
+def build_extensions_table(extensions: list[dict[str, Any]]) -> str:
+    """Generate the extensions table with backend lists."""
+    if not extensions:
+        return "_(no extensions yet)_"
+    lines: list[str] = []
+    lines.append("| Extension | What it adds | Implementations |")
+    lines.append("|---|---|---|")
+    for ext in extensions:
+        label = ext["name"]
+        question = ext["question"]
+        backends = ext["backends"]
+        if backends:
+            items = []
+            for bk in backends:
+                entry = f"`{bk['name']}`"
+                if bk["doc"]:
+                    entry += f" — {bk['doc']}"
+                items.append(f"- {entry}")
+            impl_col = "<br>".join(items)
+        else:
+            impl_col = "—"
+        lines.append(f"| `{label}` | {question} | {impl_col} |")
+    return "\n".join(lines) + "\n"
 
 
 # ── 4. LLM roadmap update (DeepSeek, OpenAI-compatible) ──────────────
@@ -327,15 +420,28 @@ def patch_readme(
     readme: str,
     primitives: dict[str, dict[str, str]],
     impls: dict[str, list[dict[str, str]]],
+    extensions: list[dict[str, Any]],
     new_roadmap: str | None,
     new_examples: str,
 ) -> str:
-    """Replace the table, examples, and roadmap sections."""
+    """Replace the primitive table, extensions table, examples, and roadmap sections."""
     result = readme
     new_table = build_table(primitives, impls)
+    new_ext_table = build_extensions_table(extensions)
 
-    # Replace table
+    # Where extensions live: a short blurb after the table
+    EXT_BLURB = (
+        "Extensions live under `pyxen.core.ext.*` and are initialized lazily from\n"
+        "their section in `runtime.json`. They can be stateful and modify system\n"
+        "state (e.g. the OS crontab)."
+    )
+    new_ext_section = new_ext_table + "\n" + EXT_BLURB + "\n"
+
+    # Replace primitive table
     result = _replace_section(result, "## What", new_table)
+
+    # Replace extensions
+    result = _replace_section(result, "## Extensions", new_ext_section)
 
     # Replace examples
     result = _replace_section(result, "## Examples", new_examples)
@@ -369,6 +475,7 @@ def _replace_section(md: str, heading: str, new_content: str) -> str:
 def main() -> int:
     primitives = discover_primitives()
     impls = discover_impls()
+    extensions = discover_extensions()
     examples = discover_examples()
 
     if not README_PATH.exists():
@@ -387,7 +494,10 @@ def main() -> int:
     new_examples = build_examples_section(examples)
     print(f"→ discovered {len(examples)} examples: {', '.join(e['name'] for e in examples) or '(none)'}")
 
-    patched = patch_readme(current, primitives, impls, new_roadmap, new_examples)
+    ext_names = [e["name"] for e in extensions]
+    print(f"→ discovered {len(extensions)} extensions: {', '.join(ext_names) or '(none)'}")
+
+    patched = patch_readme(current, primitives, impls, extensions, new_roadmap, new_examples)
 
     if patched != current:
         README_PATH.write_text(patched, encoding="utf-8")
