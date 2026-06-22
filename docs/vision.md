@@ -2,35 +2,25 @@
 
 A research note motivating the design of pyxen.
 
-The most impactful layer is a *general-purpose* portable runtime that *any* application can link against.
+## The problem
+
+You build an impressive app with openclaw (or any agentic framework). It wires together LLMs, tools, storage, secrets, cron jobs, and identity — all managed by openclaw on your local machine. It works great. Then you try to share it.
+
+You can't. Your friend needs different config paths. Your CI needs different secrets. Deploying to the cloud means different auth, different storage backends, different everything. The app is fused to your environment.
+
+This isn't a framework problem — it's an *environment coupling* problem. The app knows too much about *where* it runs.
 
 ## What it is
 
-A library, a config file, a set of interfaces. No vendor lock. The runtime routes every environment-shaped call (`identity()`, `storage()`, `ipc()`, etc.) to a *provider* configured in `runtime.json`. Swap the config, swap the environment — no code changes. OpenAI's Agents SDK is not a wrapped backend; its individual pieces (Manifest, handoffs, tracing) are consumed per-primitive alongside non-OpenAI implementations.
+A library, a config file, a set of interfaces. Every environment-shaped call (`identity()`, `storage()`, `secrets()`) routes to a pluggable *provider* configured in `runtime.json`. Swap the file, swap the environment — zero code changes.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  APPLICATION  — CLI · web · pipeline · w/ or w/o agents     │
-│  rt = await Runtime.load("runtime.json")                    │
-│  await rt.storage.put(...)  ·  await rt.identity.current()  │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│  PORTABLE RUNTIME  — 7 primitives                            │
-│  identity · tokens · ipc · pkg · storage · secrets · observe │
-└──────────────────────────┬──────────────────────────────────┘
-                           │  runtime.json maps primitives → providers
-┌──────────────────────────▼──────────────────────────────────┐
-│  IMPL LAYER  — per-primitive impls (sqlite, keychain, pip,   │
-│                openai_handoffs, otel, …)                     │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│  RAW ENVIRONMENT  — the machine, the cloud, the OS           │
-└─────────────────────────────────────────────────────────────┘
-```
+![](./portable-runtime.svg)
 
 The runtime is not a layer above agents or SDKs. It's the interface the *application* uses. The app shell and any embedded agents share one runtime. **Intertwined, not layered.**
+
+## How it solves environment coupling
+
+The app calls `rt.secrets.get("DATABASE_URL")` — it doesn't know or care whether that resolves from `.env`, Vault, or AWS Secrets Manager. `runtime.json` maps each primitive to a provider. Swap the file, the app moves. Same binary, different environment.
 
 ## Prior art
 
@@ -48,6 +38,4 @@ Each of these captures one piece; none compose all seven:
 
 ## The bet
 
-By 2027 every serious agent runtime will have a provider-injection interface shaped like these 7 primitives. OS-level primitives will ship eventually, but **after** the runtime — because the runtime is faster to build, easier to adopt, and solves the portability problem enterprises are hitting *today*.
-
-**The Bet:** Ship pyxen as a pip package. The 7 primitives are what apps actually need. When the OS catches up, the runtime uses it as a provider.
+The problem is real today. Every agentic app hits environment coupling the moment you try to share or deploy it. pyxen ships as a pip package. The 7 primitives are what apps actually need. When OS-level abstractions catch up, the runtime can use them as providers — but you don't need to wait.
