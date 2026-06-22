@@ -1,12 +1,44 @@
-# pyxen — Portable Python Runtime for Agent Apps
+# pyxen — A lightweight, portable Python runtime that decouples agent logic from underlying provider implementations.
 
+Swap storage, secrets, identity, tokens, observability, package management, and IPC via `runtime.json`. Zero code changes.
 
-Agentic runtimes lock apps to themselves. pyxen flips this: 7 primitives (storage, secrets, identity, tokens, observability, pkg, ipc) with pluggable backends — swap via `runtime.json`, no code changes. The agentic runtime can build standalone apps that run elsewhere, or be shared.
+```python
+import asyncio
+from pyxen import Runtime
 
+async def main():
+    rt = await Runtime.load("runtime.json")
+    await rt.storage.put("greetings", "world", {"from": "me"})
+    async with rt.observability.trace("greet") as span:
+        span.log("info", "wrote greeting")
 
-## What
+asyncio.run(main())
+```
 
-| Primitive | What it answers | Implementations |
+Swap backends by editing `runtime.json`, not code:
+
+```json
+// traces → stdout
+{ "observability": { "implementation": "stdout", "config": {} } }
+// traces → /tmp/traces.jsonl
+{ "observability": { "implementation": "file", "config": { "path": "/tmp/traces.jsonl" } } }
+// storage → SQLite
+{ "storage": { "implementation": "local_sqlite", "config": { "path": "./runtime-data.db" } } }
+// storage → in-memory (testing)
+{ "storage": { "implementation": "inmemory", "config": {} } }
+```
+
+Same pattern for identity, secrets, tokens, pkg, ipc — every primitive.
+
+```bash
+pyxen init        # write starter runtime.json
+pyxen validate    # validate it
+pyxen doctor      # verify impls are importable
+```
+
+## The 7 primitives
+
+| Primitive | What it answers | Backends |
 |---|---|---|
 | `identity` | Who's calling? | - `env` — reads identity from environment variables.<br>- `keychain` — reads identity from macOS Keychain. |
 | `ipc` | Message another process | - `a2a` — Agent-to-Agent protocol communication.<br>- `inproc` — async in-process message bus. |
@@ -22,148 +54,58 @@ Agentic runtimes lock apps to themselves. pyxen flips this: 7 primitives (storag
 |---|---|---|
 | `cron` | Schedule recurring tasks | - `crontab` — crontab backend.<br>- `windows` — windows backend.<br>- `state` — execution history (timestamps, exit codes) queryable via runtime extension API. |
 
-Extensions live under `pyxen.core.ext.*` and are initialized lazily from
-their section in `runtime.json`. They can be stateful and modify system
-state (e.g. the OS crontab).
+Extensions live under `pyxen.core.ext.*` and are initialized from
+their section in `runtime.json`.
 
 
 ## How it compares
 
 | vs | pyxen |
-|---|-------|
-| **openai-agents SDK** | SDK: framework. pyxen: interfaces + optional backend (`pip install pyxen[openai]`). |
+|---|---|
+| **openai-agents SDK** | SDK is a framework. pyxen provides interfaces + optional backend (`pip install pyxen[openai]`). |
 | **Dapr** | Dapr: sidecar / Kubernetes / any language. pyxen: in-process / zero infra / Python-only. |
-
-## Quick start
-
-```python
-import asyncio
-from pyxen import Runtime
-
-async def main():
-    rt = await Runtime.load("runtime.json")
-    await rt.storage.put("greetings", "world", {"from": "me"})
-    async with rt.observability.trace("greet") as span:
-        span.log("info", "wrote greeting")
-
-asyncio.run(main())
-```
-
-Swap backends by changing `runtime.json`, not code:
-
-```json
-// traces → stdout
-{ "observability": { "implementation": "stdout", "config": {} } }
-
-// traces → /tmp/traces.jsonl
-{ "observability": { "implementation": "file", "config": { "path": "/tmp/traces.jsonl" } } }
-
-// traces → OpenAI dashboard
-{ "observability": { "implementation": "openai_tracing", "config": {} } }
-
-// storage → local files
-{ "storage": { "implementation": "local_fs_mount", "config": { "mounts": [{ "namespace": "data", "type": "local_dir", "src": "./data" }] } } }
-
-// storage → SQLite
-{ "storage": { "implementation": "local_sqlite", "config": { "path": "./runtime-data.db" } } }
-
-// storage → in-memory (testing)
-{ "storage": { "implementation": "inmemory", "config": {} } }
-```
-
-Same pattern applies to identity, secrets, tokens — every primitive.
-
-```bash
-pyxen init        # write starter runtime.json
-pyxen validate    # validate it
-pyxen doctor      # verify impls are importable
-pyxen test        # run test suite
-```
 
 ## Examples
 
-The `examples/` directory has 6 runnable apps. Each one shows the runtime doing a different job.
-
-### [`a2a_chat`](./examples/a2a_chat/README.md)
-
-Runs an A2A-compatible agent that processes tasks sent via JSON-RPC.
+| Example | What it shows |
+|---|---|
+| [`a2a_chat`](./examples/a2a_chat/) | Runs an A2A-compatible agent that processes tasks sent via JSON-RPC.
 Supports both request/reply (``tasks/sendMessage``) and streaming
-(``tasks/sendStreamingMessage``) interaction patterns.
-
-```bash
-uvicorn examples.a2a_chat.agent:app --reload --port 8080
-```
-
-### [`cron_app`](./examples/cron_app/README.md)
-
-Loads a runtime.json that declares two cron jobs. The runtime auto-schedules
+(``tasks/sendStreamingMessage``) interaction patterns — `uvicorn examples.a2a_chat.agent:app --reload --port 8080` |
+| [`cron_app`](./examples/cron_app/) | Loads a runtime.json that declares two cron jobs. The runtime auto-schedules
 them on startup via the OS-native backend (crontab on Linux/macOS, schtasks on
-Windows). The app itself is hands-off — it never calls a scheduler API.
-
-```bash
-python -m examples.cron_app.main
-```
-
-### [`data_pipeline`](./examples/data_pipeline/README.md)
-
-The point is to demonstrate that the **only thing** that changes between
+Windows). The app itself is hands-off — it never calls a scheduler API — `python -m examples.cron_app.main` |
+| [`data_pipeline`](./examples/data_pipeline/) | The point is to demonstrate that the **only thing** that changes between
 "local dev" and "production deploy" is the ``runtime.json`` file. The
-script code is identical.
-
-```bash
-PYTHONPATH=src python examples/data_pipeline/pipeline.py
-```
-
-### [`hello_runtime`](./examples/hello_runtime/README.md)
-
-A 30-line Python program that loads the runtime, exercises 3 primitives,
+script code is identical — `PYTHONPATH=src python examples/data_pipeline/pipeline.py` |
+| [`hello_runtime`](./examples/hello_runtime/) | A 30-line Python program that loads the runtime, exercises 3 primitives,
 and prints a single line. It does the smallest possible thing that proves
-the runtime architecture works end-to-end.
-
-```bash
-python -m examples.hello_runtime.main
-```
-
-### [`notes_app`](./examples/notes_app/README.md)
-
-This is a plain web app: no agents, no LLM calls. The point is to
+the runtime architecture works end-to-end — `python -m examples.hello_runtime.main` |
+| [`notes_app`](./examples/notes_app/) | This is a plain web app: no agents, no LLM calls. The point is to
 demonstrate that the runtime serves a normal Python web app just as well
-as an agent-containing one.
-
-```bash
-pip install pyxen[examples]      # adds fastapi + uvicorn
+as an agent-containing one — `pip install pyxen[examples]      # adds fastapi + uvicorn
 pyxen validate runtime.json
-uvicorn examples.notes_app.app:app --reload
-```
-
-### [`pkg_demo`](./examples/pkg_demo/README.md)
-
-The runtime.json declares ``pkg`` with the ``pip`` implementation,
+uvicorn examples.notes_app.app:app --reload` |
+| [`pkg_demo`](./examples/pkg_demo/) | The runtime.json declares ``pkg`` with the ``pip`` implementation,
 pointing to a ``requirements.txt``. On load, app code calls
 ``rt.pkg.ensure()`` to install any missing PyPI packages, then
-imports and uses them normally.
-
-```bash
-python -m examples.pkg_demo.main
-```
+imports and uses them normally — `python -m examples.pkg_demo.main` |
 
 
 ## Agent distribution artifacts
 
-The [`agents/`](./agents/) directory gives agents the instructions they need to **write portable apps using pyxen**.
+The [`agents/`](./agents/) directory gives agents the instructions to build portable apps using pyxen.
 
 | File | When to use |
 |---|---|
 | [`agents/coding-agent-dist.md`](./agents/coding-agent-dist.md) | Point any agent at this to build pyxen apps. |
-| [`agents/openclaw-dist.md`](./agents/openclaw-dist.md) | Copy into your openclaw workspace as a new sub-agent (see [`agents/forge/`](./agents/forge/)). |
-
-Include the relevant file when asking your agent to build an app.
+| [`agents/openclaw-dist.md`](./agents/openclaw-dist.md) | Copy into your openclaw workspace as a sub-agent. |
 
 ## Roadmap
 
-- Agent skill or plugin that builds or translates apps into pyxen runtime rather than using their natives
+- Agent skill or plugin that builds / translates apps into pyxen runtime
 - Stateful runtime and daemon
 
 ## Fun fact
 
-The pre-push hook calls DeepSeek via the OpenAI-compatible API to auto-update this README — the roadmap and implementation table regenerate themselves before every push. Yes, this README reads itself, edits itself, and commits itself. It's READMEs all the way down.
+The pre-push hook calls DeepSeek via the OpenAI-compatible API to auto-update this README. Yes, this README reads itself, edits itself, and commits itself. It's READMEs all the way down.

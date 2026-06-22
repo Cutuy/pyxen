@@ -251,7 +251,7 @@ def build_table(
 ) -> str:
     """Generate the primitives table with implementation lists."""
     lines: list[str] = []
-    lines.append("| Primitive | What it answers | Implementations |")
+    lines.append("| Primitive | What it answers | Backends |")
     lines.append("|---|---|---|")
     for prim, info in primitives.items():
         label = info["label"]
@@ -397,23 +397,20 @@ def build_examples_section(examples: list[dict[str, str]]) -> str:
     if not examples:
         return "_(no examples yet)_\n"
     lines: list[str] = [
-        (
-            f"The `examples/` directory has {len(examples)} runnable apps. "
-            "Each one shows the runtime doing a different job.\n"
-        )
+        "| Example | What it shows |",
+        "|---|---|",
     ]
     for ex in examples:
-        lines.append(f"### [`{ex['name']}`](./{ex['rel_path']}/README.md)")
-        lines.append("")
-        if ex["blurb"]:
-            lines.append(ex["blurb"])
-            lines.append("")
-        if ex["run_cmd"]:
-            lines.append("```bash")
-            lines.append(ex["run_cmd"])
-            lines.append("```")
-            lines.append("")
-    return "\n".join(lines).rstrip() + "\n"
+        blurb = ex["blurb"] or ""
+        # Strip trailing period for consistency
+        if blurb.endswith("."):
+            blurb = blurb[:-1]
+        run_cmd = ex["run_cmd"] or ""
+        cmd_suffix = f" — `{run_cmd}`" if run_cmd else ""
+        lines.append(
+            f"| [`{ex['name']}`](./{ex['rel_path']}/) | {blurb}{cmd_suffix} |"
+        )
+    return "\n".join(lines) + "\n"
 
 
 def patch_readme(
@@ -431,14 +428,13 @@ def patch_readme(
 
     # Where extensions live: a short blurb after the table
     EXT_BLURB = (
-        "Extensions live under `pyxen.core.ext.*` and are initialized lazily from\n"
-        "their section in `runtime.json`. They can be stateful and modify system\n"
-        "state (e.g. the OS crontab)."
+        "Extensions live under `pyxen.core.ext.*` and are initialized from\n"
+        "their section in `runtime.json`."
     )
     new_ext_section = new_ext_table + "\n" + EXT_BLURB + "\n"
 
     # Replace primitive table
-    result = _replace_section(result, "## What", new_table)
+    result = _replace_section(result, "## The 7 primitives", new_table)
 
     # Replace extensions
     result = _replace_section(result, "## Extensions", new_ext_section)
