@@ -26,9 +26,11 @@ from typing import NamedTuple
 MODULES: tuple[str, ...] = (
     # core
     "pyxen.core.identity",
-    "pyxen.core.cron.errors",
-    "pyxen.core.cron.models",
-    "pyxen.core.cron.scheduler",
+    "pyxen.core.ext",
+    "pyxen.core.ext.cron.errors",
+    "pyxen.core.ext.cron.models",
+    "pyxen.core.ext.cron.scheduler",
+    "pyxen.core.ext.cron.state",
     "pyxen.core.tokens",
     "pyxen.core.ipc",
     "pyxen.core.pkg",

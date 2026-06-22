@@ -3,6 +3,9 @@
 The manifest is the single environment-definition artifact. It maps each
 primitive to a concrete implementation with its own configuration. The app
 never touches it at import time; ``Runtime.load()`` reads it at startup.
+
+Extension sections (e.g. ``cron``) are passed through as raw dicts and
+initialized by their respective extensions during ``Runtime.load()``.
 """
 
 from __future__ import annotations
@@ -12,12 +15,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .cron.models import CronJob
 from .errors import ManifestError
 
 # A minimal but extensible JSON Schema for runtime.json.
 # Implementations may add their own config keys; the schema is intentionally
 # permissive at the implementation-config level.
+# Extension sections are listed explicitly so they pass validation.
 SCHEMA: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "pyxen runtime config",
@@ -85,6 +88,12 @@ SCHEMA: dict[str, Any] = {
         "cron": {
             "type": "object",
             "properties": {
+                "state": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                    },
+                },
                 "jobs": {
                     "type": "array",
                     "items": {
@@ -118,6 +127,10 @@ PRIMITIVE_NAMES: tuple[str, ...] = (
     "observability",
 )
 
+# Extension names known to the manifest. The raw config section for each is
+# stored in ``Manifest.extensions`` and passed to the extension's ``init()``.
+EXTENSION_NAMES: tuple[str, ...] = ("cron",)
+
 
 @dataclass(frozen=True)
 class PrimitiveBinding:
@@ -135,8 +148,7 @@ class Manifest:
     version: str
     bindings: dict[str, PrimitiveBinding]
     raw: dict[str, Any]
-    cron_jobs: tuple[CronJob, ...] = ()
-    cron_on_duplicate: str = "replace"
+    extensions: dict[str, Any]  # extension name → raw config section
 
     def get(self, primitive: str) -> PrimitiveBinding:
         """Return the binding for ``primitive`` or raise ``ManifestError``."""
@@ -175,6 +187,9 @@ def parse_manifest(raw: dict[str, Any]) -> Manifest:
     and that any declared primitive binding has both an implementation name
     and a config object. Implementations are free to add their own config
     keys; the schema doesn't try to enumerate them.
+
+    Extension sections are stored as-is in ``Manifest.extensions``. The
+    extension itself validates and processes its config during init.
     """
     if "version" not in raw:
         raise ManifestError("manifest is missing required field 'version'")
@@ -206,62 +221,22 @@ def parse_manifest(raw: dict[str, Any]) -> Manifest:
             config=config,
         )
 
-    return Manifest(version=raw["version"], bindings=bindings, raw=raw,
-                    cron_jobs=_parse_cron_jobs(raw), cron_on_duplicate=_parse_cron_duplicate(raw))
+    extensions: dict[str, Any] = {}
+    for ext_name in EXTENSION_NAMES:
+        section = raw.get(ext_name)
+        if section is not None:
+            if not isinstance(section, dict):
+                raise ManifestError(
+                    f"manifest section '{ext_name}' must be a JSON object"
+                )
+            extensions[ext_name] = section
 
-
-def _parse_cron_duplicate(raw: dict[str, Any]) -> str:
-    cron_section = raw.get("cron")
-    if not isinstance(cron_section, dict):
-        return "replace"
-    value = cron_section.get("on_duplicate", "replace")
-    if not isinstance(value, str):
-        raise ManifestError("cron 'on_duplicate' must be a string")
-    if value not in ("replace", "fail"):
-        raise ManifestError(f"cron 'on_duplicate' must be 'replace' or 'fail', got {value!r}")
-    return value
-
-
-def _parse_cron_jobs(raw: dict[str, Any]) -> tuple[CronJob, ...]:
-    cron_section = raw.get("cron")
-    if cron_section is None:
-        return ()
-
-    if not isinstance(cron_section, dict):
-        raise ManifestError("manifest section 'cron' must be a JSON object")
-
-    jobs_raw = cron_section.get("jobs")
-    if jobs_raw is None:
-        return ()
-
-    if not isinstance(jobs_raw, list):
-        raise ManifestError("cron 'jobs' must be a JSON array")
-
-    jobs: list[CronJob] = []
-    for idx, job_raw in enumerate(jobs_raw):
-        if not isinstance(job_raw, dict):
-            raise ManifestError(f"cron job at index {idx} must be a JSON object")
-        name = job_raw.get("name")
-        if not isinstance(name, str) or not name:
-            raise ManifestError(f"cron job at index {idx} is missing a string 'name'")
-        command = job_raw.get("command")
-        if not isinstance(command, str) or not command:
-            raise ManifestError(f"cron job at index {idx} is missing a string 'command'")
-        schedule = job_raw.get("schedule")
-        if not isinstance(schedule, str) or not schedule:
-            raise ManifestError(f"cron job at index {idx} is missing a string 'schedule'")
-        enabled = job_raw.get("enabled", True)
-        if not isinstance(enabled, bool):
-            raise ManifestError(f"cron job '{name}': 'enabled' must be a boolean")
-        env = job_raw.get("environment", {})
-        if not isinstance(env, dict):
-            raise ManifestError(f"cron job '{name}': 'environment' must be a JSON object")
-        jobs.append(CronJob(
-            name=name, command=command, schedule=schedule,
-            enabled=enabled, environment=env,
-        ))
-
-    return tuple(jobs)
+    return Manifest(
+        version=raw["version"],
+        bindings=bindings,
+        raw=raw,
+        extensions=extensions,
+    )
 
 
 def _main() -> None:
@@ -430,16 +405,12 @@ def _main() -> None:
     assert "version" in SCHEMA["required"]
     assert set(SCHEMA["properties"].keys()) >= set(PRIMITIVE_NAMES)
 
-    # --- cron section: absent → empty tuple ---
-    m_no_cron = parse_manifest({"version": "1"})
-    assert m_no_cron.cron_jobs == ()
+    # --- cron extension: absent → empty dict ---
+    m_no_ext = parse_manifest({"version": "1"})
+    assert m_no_ext.extensions == {}
 
-    # --- cron section: empty → empty tuple ---
-    m_empty_cron = parse_manifest({"version": "1", "cron": {}})
-    assert m_empty_cron.cron_jobs == ()
-
-    # --- cron section: with jobs ---
-    m_cron = parse_manifest({
+    # --- cron extension: present → stored in extensions dict ---
+    m_ext = parse_manifest({
         "version": "1",
         "cron": {
             "jobs": [
@@ -449,90 +420,26 @@ def _main() -> None:
             ]
         }
     })
-    assert len(m_cron.cron_jobs) == 3
-    assert m_cron.cron_jobs[0].name == "backup"
-    assert m_cron.cron_jobs[0].command == "/usr/bin/backup.sh"
-    assert m_cron.cron_jobs[0].schedule == "0 3 * * *"
-    assert m_cron.cron_jobs[0].enabled is True
-    assert m_cron.cron_jobs[0].environment == {}
-    assert m_cron.cron_jobs[1].name == "heartbeat"
-    assert m_cron.cron_jobs[1].environment == {"PATH": "/usr/bin"}
-    assert m_cron.cron_jobs[2].schedule == "@daily"
+    assert "cron" in m_ext.extensions
+    cron_section = m_ext.extensions["cron"]
+    assert len(cron_section["jobs"]) == 3
 
-    # --- cron section: non-object raises ---
+    # --- Extension section: non-object raises ---
     try:
         parse_manifest({"version": "1", "cron": "bad"})
     except ManifestError as e:
         assert "cron" in str(e)
     else:
-        raise AssertionError("non-object cron should raise ManifestError")
+        raise AssertionError("non-object extension section should raise ManifestError")
 
-    # --- cron jobs: non-list raises ---
+    # --- frozen Manifest including extensions ---
+    assert m_ext.extensions["cron"]["jobs"][0]["name"] == "backup"
     try:
-        parse_manifest({"version": "1", "cron": {"jobs": "bad"}})
-    except ManifestError as e:
-        assert "jobs" in str(e)
-    else:
-        raise AssertionError("non-list cron jobs should raise ManifestError")
-
-    # --- cron job: missing name raises ---
-    try:
-        parse_manifest({"version": "1", "cron": {"jobs": [{"command": "x", "schedule": "* * * * *"}]}})
-    except ManifestError as e:
-        assert "name" in str(e)
-    else:
-        raise AssertionError("missing cron job name should raise ManifestError")
-
-    # --- cron job: missing command raises ---
-    try:
-        parse_manifest({"version": "1", "cron": {"jobs": [{"name": "x", "schedule": "* * * * *"}]}})
-    except ManifestError as e:
-        assert "command" in str(e)
-    else:
-        raise AssertionError("missing cron job command should raise ManifestError")
-
-    # --- cron job: missing schedule raises ---
-    try:
-        parse_manifest({"version": "1", "cron": {"jobs": [{"name": "x", "command": "x"}]}})
-    except ManifestError as e:
-        assert "schedule" in str(e)
-    else:
-        raise AssertionError("missing cron job schedule should raise ManifestError")
-
-    # --- frozen Manifest including cron_jobs ---
-    assert m_cron.cron_jobs[0].schedule == "0 3 * * *"
-    try:
-        m_cron.cron_jobs = ()  # type: ignore[misc]
+        m_ext.extensions = {}  # type: ignore[misc]
     except AttributeError:
         pass
     else:
         raise AssertionError("Manifest should be frozen")
-
-    # --- cron on_duplicate: default is replace ---
-    assert m_cron.cron_on_duplicate == "replace"
-
-    # --- cron on_duplicate: explicit fail ---
-    m_fail = parse_manifest({
-        "version": "1",
-        "cron": {"on_duplicate": "fail", "jobs": []}
-    })
-    assert m_fail.cron_on_duplicate == "fail"
-
-    # --- cron on_duplicate: invalid value raises ---
-    try:
-        parse_manifest({"version": "1", "cron": {"on_duplicate": "skip"}})
-    except ManifestError as e:
-        assert "on_duplicate" in str(e)
-    else:
-        raise AssertionError("invalid on_duplicate should raise ManifestError")
-
-    # --- cron on_duplicate: non-string raises ---
-    try:
-        parse_manifest({"version": "1", "cron": {"on_duplicate": 42}})
-    except ManifestError as e:
-        assert "on_duplicate" in str(e)
-    else:
-        raise AssertionError("non-string on_duplicate should raise ManifestError")
 
 
 if __name__ == "__main__":

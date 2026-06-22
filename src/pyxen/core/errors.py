@@ -41,3 +41,7 @@ class SecretsError(PyxenError):
 
 class ObservabilityError(PyxenError):
     """Raised by observability primitives when telemetry emission fails."""
+
+
+class ExtensionError(PyxenError):
+    """Raised when a runtime extension cannot be loaded or initialized."""

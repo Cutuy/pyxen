@@ -36,37 +36,34 @@ async def _run(cleanup: bool) -> None:
     who = await rt.identity.current()
     print(f"loaded runtime for {who.id} (version={rt.manifest.version})")
 
-    cron_jobs = rt.manifest.cron_jobs
-    if not cron_jobs:
-        print("no cron jobs declared in manifest")
+    if "cron" in rt.manifest.extensions:
+        print("cron extension declared in manifest")
+    else:
+        print("no cron extension declared")
         return
 
-    on_dup = rt.manifest.cron_on_duplicate
-    print(f"cron.on_duplicate = {on_dup}")
-    print(f"declared {len(cron_jobs)} cron job(s):")
-
-    from pyxen.core.cron import CronBackendError, CronScheduler
-
-    try:
-        scheduler = CronScheduler()
-    except CronBackendError:
+    # The runtime exposes the initialized cron extension as rt.cron.
+    if not hasattr(rt, "cron"):
         print("  (no cron backend available — skipping)")
         return
 
-    print(f"  backend: {scheduler.backend}")
+    cron = rt.cron
+    jobs = await cron.list()
+    print(f"  backend: {cron.backend}")
+    print(f"declared {len(jobs)} cron job(s):")
 
-    for job in cron_jobs:
-        existing = await scheduler.status(job.name)
-        status = "scheduled" if existing is None else "replaced"
+    for job in jobs:
+        existing = await cron.status(job.name)
+        status = "scheduled" if existing is None else "active"
         print(f"  [{status}] {job.name}: {job.schedule} -> {job.command}")
 
-    scheduled = await scheduler.list()
+    scheduled = await cron.list()
     ours = [j for j in scheduled if j.name.startswith("pyxen-example-")]
-    print(f"  {len(ours)} pyxen-example job(s) active in {scheduler.backend}")
+    print(f"  {len(ours)} pyxen-example job(s) active in {cron.backend}")
 
     if cleanup:
-        for job in cron_jobs:
-            await scheduler.unschedule(job.name)
+        for job in jobs:
+            await cron.unschedule(job.name)
         print("  (cleaned up — test mode)")
     elif ours:
         print()

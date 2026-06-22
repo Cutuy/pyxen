@@ -1,11 +1,14 @@
 """The ``Runtime`` class — the entry point that loads a manifest and exposes
-the 7 primitive attributes.
+primitive attributes and extensions.
 
 The runtime is intentionally thin. It reads ``runtime.json``, looks up the
 implementation registry for each declared primitive, instantiates the impl
 with its config, and exposes the result as an attribute. The application
 code never imports an implementation directly; it only ever sees
 ``rt.identity``, ``rt.tokens``, ``rt.ipc``, etc.
+
+Extensions declared in the manifest (such as ``cron``) are loaded via the
+extension registry and exposed as ``rt.<name>``.
 """
 
 from __future__ import annotations
@@ -14,7 +17,6 @@ import importlib
 from pathlib import Path
 from typing import Any
 
-from .cron.models import CronJob
 from .errors import ImplementationNotFoundError
 from .manifest import Manifest, load_manifest
 
@@ -41,8 +43,8 @@ class Runtime:
         rt = await Runtime.load("runtime.json")
 
     The resulting object's attributes (``rt.identity``, ``rt.tokens``,
-    etc.) are the configured implementations. The application code never
-    imports an implementation directly.
+    etc.) are the configured implementations. Extensions declared in the
+    manifest are loaded and exposed as ``rt.<name>`` (e.g. ``rt.cron``).
     """
 
     manifest: Manifest
@@ -59,6 +61,9 @@ class Runtime:
         that aren't declared in the manifest are left as ``None`` — the app
         can either handle the absence (try/except AttributeError) or assert
         they're present at startup.
+
+        Extensions declared in the manifest (e.g. ``cron``) are initialized
+        automatically and exposed as ``rt.<name>``.
         """
         manifest = load_manifest(path)
         rt = cls(manifest)
@@ -66,9 +71,21 @@ class Runtime:
             impl = await cls._instantiate(primitive, binding.implementation, binding.config)
             rt._impls[primitive] = impl
 
-        await _schedule_cron_jobs(manifest, Path(path).resolve().parent)
+        await rt._init_extensions(Path(path).resolve().parent)
 
         return rt
+
+    async def _init_extensions(self, app_dir: Path | None) -> None:
+        """Initialize all extensions declared in the manifest."""
+        extensions = self.manifest.extensions
+        if not extensions:
+            return
+        from .ext import init_extension
+
+        for name, config in extensions.items():
+            ext = await init_extension(name, config, app_dir)
+            if ext is not None:
+                self._impls[name] = ext
 
     @staticmethod
     async def _instantiate(
@@ -107,43 +124,8 @@ class Runtime:
             raise AttributeError(
                 f"runtime has no '{name}' primitive; "
                 f"declare it in runtime.json or check the name"
-            )
+            ) from None
         return impl
-
-
-async def _schedule_cron_jobs(manifest: Manifest, app_dir: Path | None = None) -> None:
-    if not manifest.cron_jobs:
-        return
-
-    from .cron.errors import CronBackendError
-    from .cron.scheduler import CronScheduler
-
-    try:
-        scheduler = CronScheduler()
-    except CronBackendError:
-        return
-
-    for job in manifest.cron_jobs:
-        resolved = _resolve_cron_command(job, app_dir)
-        existing = await scheduler.status(resolved.name)
-        if existing is not None:
-            if manifest.cron_on_duplicate == "fail":
-                raise CronBackendError(
-                    f"cron job '{resolved.name}' already exists; "
-                    "set cron.on_duplicate to 'replace' to overwrite"
-                )
-            await scheduler.unschedule(resolved.name)
-        await scheduler.schedule(resolved)
-
-
-def _resolve_cron_command(job: CronJob, app_dir: Path | None) -> CronJob:
-    if app_dir is None or "{APP_DIR}" not in job.command:
-        return job
-    resolved = job.command.replace("{APP_DIR}", str(app_dir))
-    return CronJob(
-        name=job.name, command=resolved, schedule=job.schedule,
-        enabled=job.enabled, environment=job.environment,
-    )
 
 
 def _main() -> None:
@@ -332,21 +314,33 @@ def _main() -> None:
             with contextlib.suppress(AttributeError):
                 _ = rt_min.__dict__  # private, raises
 
-        # --- Cron auto-scheduling: survives missing backend ---
-        from .manifest import parse_manifest
-        await _schedule_cron_jobs(parse_manifest({"version": "1"}))
-        await _schedule_cron_jobs(parse_manifest({"version": "1", "cron": {"jobs": []}}))
+        # --- Extension loading: cron extension is initialized from manifest ---
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = {
+                "version": "1",
+                "storage": {"implementation": "inmemory", "config": {}},
+                "cron": {"jobs": [{"name": "t", "command": "echo hi", "schedule": "* * * * *"}]},
+            }
+            f = Path(tmp) / "runtime.json"
+            f.write_text(json.dumps(manifest))
+            rt_cron = await Runtime.load(f)
+            # cron may be present or None depending on backend availability
+            if hasattr(rt_cron, "cron"):
+                t = await rt_cron.cron.status("t")
+                if t is not None:
+                    assert t.name == "t"
 
-        # --- _resolve_cron_command replaces {APP_DIR} ---
-        src_dir = Path(__file__).resolve().parent
-        job_in = CronJob(name="t", command="bash {APP_DIR}/scripts/t.sh", schedule="* * * * *")
-        job_out = _resolve_cron_command(job_in, src_dir)
-        assert "{APP_DIR}" not in job_out.command
-        assert str(src_dir) in job_out.command
-        assert job_out.command == f"bash {src_dir}/scripts/t.sh"
-        # No-op when no {APP_DIR}
-        same = _resolve_cron_command(job_in, None)
-        assert same.command == job_in.command
+        # --- No cron section → rt.cron is absent ---
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "runtime.json"
+            f.write_text(json.dumps({"version": "1"}))
+            rt_min = await Runtime.load(f)
+            try:
+                _ = rt_min.cron
+            except AttributeError:
+                pass
+            else:
+                raise AssertionError("no cron section → rt.cron should not exist")
 
     asyncio.run(run_tests())
 
