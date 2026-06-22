@@ -1,8 +1,7 @@
 # pyxen
 
-A lightweight, portable Python library that decouples agent logic from underlying provider implementations.
+A lightweight Python library that decouples agentic runtime from applications it builds. Allows openclaw or codex to build apps runnable elsewhere without it.
 
-Swap storage, secrets, identity, tokens, observability, package management, and IPC via `runtime.json`. Zero code changes.
 
 ```python
 import asyncio
@@ -38,7 +37,7 @@ pyxen validate    # validate it
 pyxen doctor      # verify impls are importable
 ```
 
-## The 7 primitives
+## Primitives
 
 | Primitive | What it answers | Backends |
 |---|---|---|
@@ -58,9 +57,6 @@ pyxen doctor      # verify impls are importable
 
 Extensions live under `pyxen.core.ext.*` and are initialized from
 their section in `runtime.json`.
-
-Extensions may be stateful or cause lingering effects on the system
-and are therefore **strictly optional**.
 
 
 ## How it compares
