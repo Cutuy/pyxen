@@ -46,12 +46,12 @@ from .core import (
     load_manifest,
     parse_manifest,
 )
-from .test import MODULES as TEST_MODULES
+from .test import discover as discover_test_modules
 
 __version__ = "0.2.0a1"
 
 __all__ = [
-    "TEST_MODULES",
+    "discover_test_modules",
     "__version__",
     "Budget",
     "Charge",

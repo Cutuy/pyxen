@@ -1,9 +1,9 @@
 """Test meta-runner.
 
 Each pyxen module exposes a ``_main()`` function that contains its unit
-tests. The test meta-runner imports each module and calls ``_main()``,
-collecting the results. This mirrors the Rust pattern of ``#[cfg(test)]``
-modules at the bottom of each source file.
+tests. The test meta-runner discovers those modules automatically (via AST,
+no side-effectful imports), imports each, and calls ``_main()``. This mirrors
+the Rust pattern of ``#[cfg(test)]`` modules at the bottom of each source file.
 
 The single dependency is the Python standard library. The user invokes:
 
@@ -14,63 +14,36 @@ The single dependency is the Python standard library. The user invokes:
 
 from __future__ import annotations
 
+import ast
 import importlib
 import io
 import sys
 import time
 import traceback
+from pathlib import Path
 from typing import NamedTuple
 
 from pyxen._paths import project_root
 
-# Every module that has a ``_main()`` test entry point.
-# Add new modules here as the codebase grows.
-MODULES: tuple[str, ...] = (
-    # core
-    "pyxen.core.identity",
-    "pyxen.core.ext",
-    "pyxen.core.ext.cron.errors",
-    "pyxen.core.ext.cron.models",
-    "pyxen.core.ext.cron.scheduler",
-    "pyxen.core.ext.cron.state",
-    "pyxen.core.tokens",
-    "pyxen.core.ipc",
-    "pyxen.core.pkg",
-    "pyxen.core.storage",
-    "pyxen.core.secrets",
-    "pyxen.core.observability",
-    "pyxen.core.manifest",
-    "pyxen.core.runtime",
-    # impl: identity
-    "pyxen.impl.identity.env",
-    "pyxen.impl.identity.keychain",
-    # impl: storage
-    "pyxen.impl.storage.inmemory",
-    "pyxen.impl.storage.local_sqlite",
-    "pyxen.impl.storage.redis",
-    "pyxen.impl.storage.local_fs_mount",
-    "pyxen.impl.storage.router",
-    "pyxen.impl.storage.bq",
-    "pyxen.impl.storage.gcs",
-    # impl: tokens
-    "pyxen.impl.tokens.json_budget",
-    "pyxen.impl.tokens.openai_usage",
-    # impl: ipc
-    "pyxen.impl.ipc.inproc",
-    "pyxen.impl.ipc.a2a",
-    # impl: pkg
-    "pyxen.impl.pkg.dry_run",
-    "pyxen.impl.pkg.pip",
-    "pyxen.impl.pkg.uv",
-    # impl: secrets
-    "pyxen.impl.secrets.dotenv",
-    "pyxen.impl.secrets.local_file",
-    # impl: observability
-    "pyxen.impl.observability.stdout",
-    "pyxen.impl.observability.null",
-    "pyxen.impl.observability.file",
-    "pyxen.impl.observability.openai_tracing",
-    # examples
+# ---------------------------------------------------------------------------
+# Auto-discovery — AST-based for pyxen.* (safe), explicit list for examples
+# ---------------------------------------------------------------------------
+
+_SKIP_MODULES = frozenset({
+    # runner / helpers (not tests)
+    "pyxen.test",
+    "pyxen.test_integration",
+    "pyxen._testlib",
+    "pyxen._cli",
+    "pyxen._paths",
+    "pyxen.__main__",
+    # CLI entry points, not test suites
+    "pyxen.core.ext.cron.record",
+})
+
+# Examples that have a ``_main()`` test entry point.  Kept explicit because
+# importing example modules can have side effects (e.g. ``uvicorn.run()``).
+_EXAMPLE_MODULES: tuple[str, ...] = (
     "examples.hello_runtime.main",
     "examples.notes_app.app",
     "examples.data_pipeline.pipeline",
@@ -78,15 +51,43 @@ MODULES: tuple[str, ...] = (
 )
 
 
-# Examples live outside src/ and are not installed as a package. When the
-# meta-runner imports them, it adds the repo root to sys.path so they can
-# resolve as top-level modules.
-_EXAMPLE_MODULES = {
-    "examples.hello_runtime.main",
-    "examples.notes_app.app",
-    "examples.data_pipeline.pipeline",
-    "examples.cron_app.main",
-}
+def _has_main_ast(path: Path) -> bool:
+    """Return True if the file defines a top-level ``_main`` function (AST)."""
+    try:
+        tree = ast.parse(path.read_text("utf-8"), filename=str(path))
+    except SyntaxError:
+        return False
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_main":
+            return True
+    return False
+
+
+def _discover_modules() -> list[str]:
+    """Walk src/pyxen and yield every module that has ``def _main()``.
+
+    Only the ``pyxen.*`` namespace is scanned (safe to import). Example
+    modules are listed explicitly in ``_EXAMPLE_MODULES``.
+    """
+    src = project_root() / "src"
+    modules: list[str] = []
+
+    for py_file in sorted(src.rglob("*.py")):
+        rel = py_file.relative_to(src)
+        modname = str(rel.with_suffix("")).replace("/", ".")
+        if not modname.startswith("pyxen."):
+            continue
+        if modname in _SKIP_MODULES:
+            continue
+        if _has_main_ast(py_file):
+            modules.append(modname)
+
+    return modules
+
+
+# ---------------------------------------------------------------------------
+# Runner
+# ---------------------------------------------------------------------------
 
 
 class ModuleResult(NamedTuple):
@@ -112,16 +113,20 @@ def _has_issues(output: str) -> bool:
     return False
 
 
+def _print_indented(output: str) -> None:
+    """Print captured output indented by two spaces."""
+    for line in output.splitlines():
+        if line.strip():
+            print(f"    {line}")
+
+
 def run_one(name: str) -> ModuleResult:
     """Import ``name`` and call its ``_main()``, capturing stdout.
 
     Returns a result record with the captured output.
     """
     start = time.monotonic()
-    if name in _EXAMPLE_MODULES:
-        repo_root = project_root()
-        if str(repo_root) not in sys.path:
-            sys.path.insert(0, str(repo_root))
+
     try:
         module = importlib.import_module(name)
     except Exception as exc:
@@ -177,23 +182,28 @@ def run_one(name: str) -> ModuleResult:
     )
 
 
+def discover() -> list[str]:
+    """Return all known test module names."""
+    return _discover_modules() + list(_EXAMPLE_MODULES)
+
+
 def main(modules: list[str] | None = None, *, verbose: bool = True) -> int:
-    """Run the test suite. Returns 0 on success, 1 on any failure.
+    """Run the test suite. Prints results as each module completes.
 
     Args:
-        modules: optional list of module names to test. Defaults to all
-            modules registered in ``MODULES``.
+        modules: optional list of module names to test. Defaults to
+            auto-discovered modules (every module with a ``_main()``).
         verbose: if True, print per-module pass/fail with test details;
             if False, only the summary.
     """
-    targets = modules if modules is not None else list(MODULES)
+    targets = modules if modules is not None else discover()
+
     results: list[ModuleResult] = []
 
     for name in targets:
         result = run_one(name)
         results.append(result)
 
-    for result in results:
         ms = result.duration_s * 1000
 
         if not result.passed:
@@ -216,13 +226,6 @@ def main(modules: list[str] | None = None, *, verbose: bool = True) -> int:
     print(f"{passed} passed, {failed} failed, {len(results)} total ({total_s * 1000:.1f} ms)")
 
     return 0 if failed == 0 else 1
-
-
-def _print_indented(output: str) -> None:
-    """Print captured output indented by two spaces."""
-    for line in output.splitlines():
-        if line.strip():
-            print(f"    {line}")
 
 
 if __name__ == "__main__":
