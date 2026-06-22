@@ -20,7 +20,7 @@ Agentic runtimes lock apps to themselves. pyxen flips this: 7 primitives (storag
 
 | Extension | What it adds | Implementations |
 |---|---|---|
-| `cron` | Schedule recurring tasks | <br>- Auto-schedules jobs declared in `runtime.json`.<br>- Wraps commands with state recording (start/end timestamps, exit codes).<br>- Query job state via `rt.cron.status("job-name")`.<br>- State persisted to `.pyxen/cron-state.jsonl`. |
+| `cron` | Schedule recurring tasks | <br>- `crontab` — Linux/macOS crontab backend.<br>- `windows` — Task Scheduler (`schtasks.exe`) backend.<br>- `state` — execution history (timestamps, exit codes) queryable via `rt.cron.status()`. |
 
 Extensions live under `pyxen.core.ext.*` and are initialized lazily from
 their section in `runtime.json`. They can be stateful and modify system
