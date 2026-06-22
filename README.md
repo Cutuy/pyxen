@@ -42,19 +42,19 @@ pyxen doctor      # verify impls are importable
 
 | Primitive | What it answers | Backends |
 |---|---|---|
-| `identity` | Who's calling? | - `env` — reads identity from environment variables.<br>- `keychain` — reads identity from macOS Keychain. |
-| `ipc` | Message another process | - `a2a` — Agent-to-Agent protocol communication.<br>- `inproc` — async in-process message bus. |
-| `observability` | Emit a trace / log | - `file` — structured JSON to a local log file.<br>- `null` — drop everything.<br>- `openai_tracing` — wraps the OpenAI Agents SDK tracing.<br>- `stdout` — structured JSON to stdout. |
-| `pkg` | Dependencies present? | - `dry_run` — no-op for environments where dependencies are<br>- `pip` — delegates to ``pip`` for lock-file-first dependency<br>- `uv` — delegates to ``uv`` for lock-file-first dependency |
-| `secrets` | Get a credential | - `dotenv` — reads from a ``.env`` file.<br>- `local_file` — secrets from a local JSON file. |
-| `storage` | Persist a record | - `gcs` — Google Cloud Storage-backed key-value store.<br>- `inmemory` — dict-backed, for tests and fast iteration.<br>- `local_fs_mount` — mounts a directory tree as the storage namespace.<br>- `local_sqlite` — single-file SQLite backend.<br>- `redis` — key-value backed by Redis.<br>- `router` — namespace-routed multi-backend storage. |
-| `tokens` | Within LLM budget? | - `json_budget` — soft budget with JSON file backing.<br>- `openai_usage` — structured token accounting using the OpenAI SDK. |
+| `identity` | Who's calling? | `env`, `keychain` |
+| `ipc` | Message another process | `a2a`, `inproc` |
+| `observability` | Emit a trace / log | `file`, `null`, `openai_tracing`, `stdout` |
+| `pkg` | Dependencies present? | `dry_run`, `pip`, `uv` |
+| `secrets` | Get a credential | `dotenv`, `local_file` |
+| `storage` | Persist a record | `gcs`, `inmemory`, `local_fs_mount`, `local_sqlite`, `redis`, `router` |
+| `tokens` | Within LLM budget? | `json_budget`, `openai_usage` |
 
 ## Extensions
 
-| Extension | What it adds | Implementations |
+| Extension | What it adds | Backends |
 |---|---|---|
-| `cron` | Schedule recurring tasks | - `crontab` — crontab backend.<br>- `windows` — windows backend.<br>- `state` — execution history (timestamps, exit codes) queryable via runtime extension API. |
+| `cron` | Schedule recurring tasks | `crontab`, `windows`, `state` |
 
 Extensions live under `pyxen.core.ext.*` and are initialized from
 their section in `runtime.json`.

@@ -249,7 +249,6 @@ def build_table(
     primitives: dict[str, dict[str, str]],
     impls: dict[str, list[dict[str, str]]],
 ) -> str:
-    """Generate the primitives table with implementation lists."""
     lines: list[str] = []
     lines.append("| Primitive | What it answers | Backends |")
     lines.append("|---|---|---|")
@@ -258,13 +257,8 @@ def build_table(
         question = info["question"]
         impl_list = impls.get(prim, [])
         if impl_list:
-            items = []
-            for i in impl_list:
-                entry = f"`{i['name']}`"
-                if i['doc']:
-                    entry += f" — {i['doc']}"
-                items.append(f"- {entry}")
-            impl_col = "<br>".join(items)
+            names = ", ".join(f"`{i['name']}`" for i in impl_list)
+            impl_col = f"{names}"
         else:
             impl_col = "—"
         lines.append(f"| `{label}` | {question} | {impl_col} |")
@@ -274,24 +268,18 @@ def build_table(
 # ── 3b. Build the extensions table ───────────────────────────────────
 
 def build_extensions_table(extensions: list[dict[str, Any]]) -> str:
-    """Generate the extensions table with backend lists."""
     if not extensions:
-        return "_(no extensions yet)_"
+        return "_(no extensions yet)_\n"
     lines: list[str] = []
-    lines.append("| Extension | What it adds | Implementations |")
+    lines.append("| Extension | What it adds | Backends |")
     lines.append("|---|---|---|")
     for ext in extensions:
         label = ext["name"]
         question = ext["question"]
         backends = ext["backends"]
         if backends:
-            items = []
-            for bk in backends:
-                entry = f"`{bk['name']}`"
-                if bk["doc"]:
-                    entry += f" — {bk['doc']}"
-                items.append(f"- {entry}")
-            impl_col = "<br>".join(items)
+            names = ", ".join(f"`{bk['name']}`" for bk in backends)
+            impl_col = f"{names}"
         else:
             impl_col = "—"
         lines.append(f"| `{label}` | {question} | {impl_col} |")
