@@ -25,6 +25,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from pyxen._testlib import ok, skip
+
 try:
     import redis.asyncio as aioredis  # type: ignore[import-not-found]
     _HAS_REDIS = True
@@ -117,15 +119,15 @@ def _main() -> None:
         val2 = await s.get("test", "hello")
         assert val2 is None
 
-        print("redis: OK")
+        ok("redis")
 
     if _HAS_REDIS:
         try:
             asyncio.run(go())
         except Exception as e:
-            print(f"redis: SKIP (no server? — {e})")
+            skip(f"no server? — {e}")
     else:
-        print("redis: SKIP (not installed)")
+        skip("not installed")
 
 
 if __name__ == "__main__":

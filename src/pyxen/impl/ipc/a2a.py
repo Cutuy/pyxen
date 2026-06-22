@@ -14,6 +14,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+from ..._testlib import skip
 from ...core.ipc import Message
 
 try:
@@ -339,12 +340,12 @@ def build(config: dict[str, object]) -> A2AIpc:
 def _main() -> None:
     """Test entry point for A2A IPC implementation."""
     if not _HAS_HTTPX or not _HAS_HTTPX_SSE:
-        print("SKIP a2a: httpx or httpx-sse not installed")
+        skip("httpx or httpx-sse not installed")
         return
 
     agent_url = os.environ.get("PYXEN_A2A_TEST_AGENT_URL")
     if not agent_url:
-        print("SKIP a2a: PYXEN_A2A_TEST_AGENT_URL not set")
+        skip("PYXEN_A2A_TEST_AGENT_URL not set")
         return
 
     async def go() -> None:
@@ -360,14 +361,14 @@ def _main() -> None:
         try:
             await ipc.publish("test-agent", {"action": "ping"})
         except RuntimeError as exc:
-            print(f"SKIP a2a: publish failed: {exc}")
+            skip(f"publish failed: {exc}")
             return
 
         # Test send (request/reply)
         try:
             reply = await ipc.send("test-agent", {"action": "ping"})
         except RuntimeError as exc:
-            print(f"SKIP a2a: send failed: {exc}")
+            skip(f"send failed: {exc}")
             return
 
         assert reply.target == "test-agent", (
@@ -380,7 +381,7 @@ def _main() -> None:
     try:
         asyncio.run(go())
     except Exception as exc:
-        print(f"SKIP a2a: {exc}")
+        skip(f"{exc}")
 
 
 if __name__ == "__main__":

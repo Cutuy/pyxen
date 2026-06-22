@@ -36,6 +36,7 @@ import tempfile
 from collections.abc import Awaitable
 from typing import Any
 
+from ..._testlib import atest, skip, summary
 from ...core.errors import StorageError
 from ...core.manifest import SECRET_REF_KEY
 from ...core.observability import ObservabilityImpl
@@ -331,12 +332,12 @@ def _main() -> None:
 
     bq = shutil.which("bq")
     if bq is None:
-        print("bq: SKIP (bq CLI not on PATH)")
+        skip("bq CLI not on PATH")
         return
 
     project = os.environ.get("PYXEN_BQ_TEST_PROJECT")
     if not project:
-        print("bq: SKIP (PYXEN_BQ_TEST_PROJECT not set)")
+        skip("PYXEN_BQ_TEST_PROJECT not set")
         return
 
     suffix = _secrets_mod.token_hex(4)
@@ -366,7 +367,7 @@ def _main() -> None:
         _run, "mk", "--dataset", f"{project}:{dataset}"
     ))
     if r.returncode != 0:
-        print(f"bq: SKIP (failed to create dataset: {r.stderr.strip()})")
+        skip(f"failed to create dataset: {r.stderr.strip()}")
         return
 
     # Create table
@@ -378,7 +379,7 @@ def _main() -> None:
         asyncio.run(asyncio.to_thread(
             _run, "rm", "-f", "--dataset", f"{project}:{dataset}"
         ))
-        print(f"bq: SKIP (failed to create table: {r.stderr.strip()})")
+        skip(f"failed to create table: {r.stderr.strip()}")
         return
 
     try:
@@ -455,17 +456,11 @@ def _main() -> None:
                 ("delete missing", test_delete_missing(s)),
             ]
             for name, coro in cases:
-                try:
-                    await coro
+                if await atest(name, coro):
                     passed += 1
-                    print(f"  ✓ {name}")
-                except Exception as e:
+                else:
                     failed += 1
-                    print(f"  ✗ {name}: {e}")
-            if failed:
-                print(f"bq: {passed} passed, {failed} FAILED")
-            else:
-                print(f"bq: {passed} passed — OK")
+            summary(passed, failed)
 
         asyncio.run(_run_tests())
     finally:

@@ -69,6 +69,7 @@ def build(config: dict[str, object]) -> LocalFileSecrets:
 
 
 def _main() -> None:
+    from pyxen._testlib import ok
     """Test entry point."""
     import asyncio
     import tempfile
@@ -105,7 +106,7 @@ def _main() -> None:
         v4 = await s2.get("anything")
         assert v4 is None
 
-        print("local_file secrets: OK")
+        ok("local_file")
 
     asyncio.run(go())
 

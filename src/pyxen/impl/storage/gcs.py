@@ -44,6 +44,7 @@ try:
 except ImportError:
     _HAS_GCS = False
 
+from ..._testlib import ok, skip
 from ...core.errors import StorageError
 from ...core.storage import QueryFilter
 
@@ -199,11 +200,11 @@ def _main() -> None:
 
     bucket = os.environ.get("PYXEN_GCS_TEST_BUCKET")
     if not bucket:
-        print("gcs: SKIP (PYXEN_GCS_TEST_BUCKET not set)")
+        skip("PYXEN_GCS_TEST_BUCKET not set")
         return
 
     if not _HAS_GCS:
-        print("gcs: SKIP (google-cloud-storage not installed)")
+        skip("google-cloud-storage not installed")
         return
 
     from pyxen.core.storage import QueryFilter
@@ -275,12 +276,12 @@ def _main() -> None:
             for blob in s._client.list_blobs(bucket, prefix=f"{prefix}{ns}/"):  # type: ignore[union-attr]
                 blob.delete()
 
-        print("gcs: OK")
+        ok("gcs")
 
     try:
         asyncio.run(go())
     except Exception as exc:
-        print(f"gcs: SKIP ({exc})")
+        skip(f"{exc}")
 
 
 if __name__ == "__main__":

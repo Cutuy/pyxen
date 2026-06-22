@@ -23,6 +23,8 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
+from pyxen._testlib import skip
+
 try:
     from agents.usage import Usage
     _HAS_OPENAI = True
@@ -160,7 +162,7 @@ def _main() -> None:
     if _HAS_OPENAI:
         asyncio.run(go())
     else:
-        print("Skipping openai_usage tests (sdk not installed)")
+        skip("openai-agents not installed")
 
 
 if __name__ == "__main__":
