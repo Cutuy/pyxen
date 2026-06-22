@@ -46,6 +46,7 @@ Roadmap + design notes. For the high-level "why", see [`vision.md`](./vision.md)
 
 - [ ] `pyxis doctor` extension — validates CLI binaries are present (e.g. `redis-cli` for shell storage)
 - [ ] README reframe: CLI-first, native-when-needed
+- [ ] Generalize inter-impl dependency resolution — walk manifest dep graph, inject required primitives via DI rather than hardcoded `$secret` / secrets special-casing
 
 ## Open questions
 

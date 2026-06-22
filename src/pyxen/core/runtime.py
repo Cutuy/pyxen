@@ -14,11 +14,18 @@ extension registry and exposed as ``rt.<name>``.
 from __future__ import annotations
 
 import importlib
+import inspect
 from pathlib import Path
 from typing import Any
 
-from .errors import ImplementationNotFoundError
-from .manifest import Manifest, load_manifest
+from .errors import ImplementationNotFoundError, ManifestError
+from .manifest import (
+    Manifest,
+    _config_has_secret_refs,
+    load_manifest,
+    SECRET_REF_KEY,
+)
+
 
 # Map a primitive name to:
 #   (the core interface, the default impl module path under ``pyxen.impl``)
@@ -55,20 +62,35 @@ class Runtime:
 
     @classmethod
     async def load(cls, path: str | Path) -> Runtime:
-        """Load a runtime from a ``runtime.json`` file.
-
-        Resolves and instantiates every declared primitive binding. Primitives
-        that aren't declared in the manifest are left as ``None`` — the app
-        can either handle the absence (try/except AttributeError) or assert
-        they're present at startup.
-
-        Extensions declared in the manifest (e.g. ``cron``) are initialized
-        automatically and exposed as ``rt.<name>``.
-        """
         manifest = load_manifest(path)
         rt = cls(manifest)
+
+        # Phase 0: build secrets primitive first (if declared)
+        secrets_binding = manifest.bindings.get("secrets")
+        secrets_impl = None
+        if secrets_binding is not None:
+            secrets_impl = await cls._instantiate(
+                "secrets",
+                secrets_binding.implementation,
+                secrets_binding.config,
+            )
+            rt._impls["secrets"] = secrets_impl
+
+        # Phase 1: build remaining primitives
         for primitive, binding in manifest.bindings.items():
-            impl = await cls._instantiate(primitive, binding.implementation, binding.config)
+            if primitive == "secrets":
+                continue  # already built in phase 0
+            needs_secrets = _config_has_secret_refs(binding.config)
+            if needs_secrets and secrets_impl is None:
+                raise ManifestError(
+                    f"config references {SECRET_REF_KEY} but no secrets primitive declared"
+                )
+            impl = await cls._instantiate(
+                primitive,
+                binding.implementation,
+                binding.config,
+                secrets=secrets_impl if needs_secrets else None,
+            )
             rt._impls[primitive] = impl
 
         await rt._init_extensions(Path(path).resolve().parent)
@@ -89,9 +111,20 @@ class Runtime:
 
     @staticmethod
     async def _instantiate(
-        primitive: str, implementation: str, config: dict[str, Any]
+        primitive: str,
+        implementation: str,
+        config: dict[str, Any],
+        *,
+        secrets: Any = None,
     ) -> Any:
-        """Resolve an implementation module and call its ``build(config)``."""
+        """Resolve an implementation module and call its ``build(config)``.
+
+        The optional ``secrets`` kwarg is passed to ``build()`` when the
+        binding's config contains ``$secret`` references. Existing impls
+        that don't accept the kwarg receive ``build(config, secrets=None)``
+        which is harmless — only impls with ``$secret`` refs get a non-None
+        value.
+        """
         package = PRIMITIVE_TABLE.get(primitive)
         if package is None:
             raise ImplementationNotFoundError(
@@ -110,7 +143,11 @@ class Runtime:
             raise ImplementationNotFoundError(
                 f"implementation module '{module_name}' is missing a 'build' function"
             )
-        result = build(config)
+        sig_params = inspect.signature(build).parameters
+        if secrets is not None and "secrets" in sig_params:
+            result = build(config, secrets=secrets)
+        else:
+            result = build(config)
         if hasattr(result, "__await__"):
             result = await result
         return result
@@ -341,6 +378,58 @@ def _main() -> None:
                 pass
             else:
                 raise AssertionError("no cron section → rt.cron should not exist")
+
+        # --- _config_has_secret_refs: top-level ---
+        assert _config_has_secret_refs({SECRET_REF_KEY: "mykey"}) is True
+        assert _config_has_secret_refs({"not_secret": "val"}) is False
+        assert _config_has_secret_refs({SECRET_REF_KEY: "k", "extra": 1}) is False
+
+        # --- _config_has_secret_refs: nested ---
+        assert _config_has_secret_refs({"creds": {SECRET_REF_KEY: "k"}}) is True
+        assert _config_has_secret_refs({"a": {"b": [{SECRET_REF_KEY: "x"}]}}) is True
+
+        # --- _config_has_secret_refs: non-dict/non-list ---
+        assert _config_has_secret_refs(None) is False
+        assert _config_has_secret_refs("string") is False
+        assert _config_has_secret_refs(42) is False
+
+        # --- Two-phase build: $secret ref with secrets primitive ---
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "runtime.json"
+            f.write_text(json.dumps({
+                "version": "1",
+                "secrets": {"implementation": "dotenv", "config": {"path": str(Path(tmp) / ".env")}},
+                "storage": {"implementation": "inmemory", "config": {"credentials": {SECRET_REF_KEY: "gcp"}}},
+            }))
+            rt_secret = await Runtime.load(f)
+            assert rt_secret.secrets is not None
+            assert rt_secret.storage is not None
+
+        # --- Two-phase build: $secret ref without secrets primitive raises ---
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "runtime.json"
+            f.write_text(json.dumps({
+                "version": "1",
+                "storage": {"implementation": "inmemory", "config": {"credentials": {SECRET_REF_KEY: "gcp"}}},
+            }))
+            try:
+                await Runtime.load(f)
+            except ManifestError as e:
+                assert SECRET_REF_KEY in str(e)
+            else:
+                raise AssertionError("$secret ref without secrets should raise ManifestError")
+
+        # --- Two-phase build: no $secret refs → secrets=None passed to build ---
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "runtime.json"
+            f.write_text(json.dumps({
+                "version": "1",
+                "storage": {"implementation": "inmemory", "config": {}},
+                "secrets": {"implementation": "dotenv", "config": {"path": str(Path(tmp) / ".env")}},
+            }))
+            rt_no_ref = await Runtime.load(f)
+            assert rt_no_ref.storage is not None
+            assert rt_no_ref.secrets is not None
 
     asyncio.run(run_tests())
 

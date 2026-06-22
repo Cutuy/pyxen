@@ -24,7 +24,7 @@ from .errors import (
 from .identity import Credential, Identity, IdentityImpl
 from .ipc import IpcImpl, Message
 from .manifest import (
-    SCHEMA as MANIFEST_SCHEMA,
+    MANIFEST_SCHEMA,
 )
 from .manifest import (
     Manifest,

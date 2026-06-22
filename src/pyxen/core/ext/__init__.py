@@ -12,7 +12,7 @@ To add a new extension:
    function that accepts ``(config: dict, app_dir: Path | None)`` and
    returns an object to expose on the runtime.
 2. Add the name to ``EXTENSION_NAMES`` and ``EXTENSION_REGISTRY`` below.
-3. Add its schema to the manifest (``manifest.SCHEMA`` top-level properties).
+3. Add its schema to the manifest (``manifest.MANIFEST_SCHEMA`` top-level properties).
 """
 
 from __future__ import annotations
