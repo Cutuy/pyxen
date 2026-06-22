@@ -393,7 +393,6 @@ ROADMAP_ANCHOR = "<!-- roadmap -->"
 
 
 def build_examples_section(examples: list[dict[str, str]]) -> str:
-    """Stub — examples section is hand-curated and never auto-generated."""
     return ""
 
 
