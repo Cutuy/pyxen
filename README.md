@@ -16,6 +16,16 @@ Agentic runtimes lock apps to themselves. pyxen flips this: 7 primitives (storag
 | `storage` | Persist a record | <br>- `gcs` — Google Cloud Storage-backed key-value store.<br>- `inmemory` — dict-backed, for tests and fast iteration.<br>- `local_fs_mount` — mounts a directory tree as the storage namespace.<br>- `local_sqlite` — single-file SQLite backend.<br>- `redis` — key-value backed by Redis.<br>- `router` — namespace-routed multi-backend storage. |
 | `tokens` | Within LLM budget? | <br>- `json_budget` — soft budget with JSON file backing.<br>- `openai_usage` — structured token accounting using the OpenAI SDK. |
 
+## Extensions
+
+| Extension | What it adds | Implementations |
+|---|---|---|
+| `cron` | Schedule recurring tasks | <br>- Auto-schedules jobs declared in `runtime.json`.<br>- Wraps commands with state recording (start/end timestamps, exit codes).<br>- Query job state via `rt.cron.status("job-name")`.<br>- State persisted to `.pyxen/cron-state.jsonl`. |
+
+Extensions live under `pyxen.core.ext.*` and are initialized lazily from
+their section in `runtime.json`. They can be stateful and modify system
+state (e.g. the OS crontab).
+
 ## How it compares
 
 | vs | pyxen |
