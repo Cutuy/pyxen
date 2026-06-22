@@ -134,9 +134,9 @@ async def _crontab_add_line(line: str) -> None:
     marker = f"{_MARKER_PREFIX}{line.rsplit(_MARKER_PREFIX, 1)[1].strip()}"
 
     cleaned: list[str] = []
-    for line in existing:
-        if marker.strip("# ") not in line:
-            cleaned.append(line)
+    for existing_line in existing:
+        if marker.strip("# ") not in existing_line:
+            cleaned.append(existing_line)
     cleaned.append(line.rstrip("\n"))
     await _crontab_write(cleaned)
 
