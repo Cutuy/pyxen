@@ -18,8 +18,9 @@ import importlib
 import sys
 import time
 import traceback
-from pathlib import Path
 from typing import NamedTuple
+
+from pyxen._paths import project_root
 
 # Every module that has a ``_main()`` test entry point.
 # Add new modules here as the codebase grows.
@@ -99,9 +100,7 @@ def run_one(name: str) -> ModuleResult:
     """Import ``name`` and call its ``_main()``. Returns a result record."""
     start = time.monotonic()
     if name in _EXAMPLE_MODULES:
-        # Add the repo root to sys.path so example modules can be imported.
-        # __file__ is src/pyxen/test.py; parents[2] is the repo root.
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = project_root()
         if str(repo_root) not in sys.path:
             sys.path.insert(0, str(repo_root))
     try:

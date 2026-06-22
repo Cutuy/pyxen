@@ -1,12 +1,4 @@
-"""runtime.json schema and loader.
-
-The manifest is the single environment-definition artifact. It maps each
-primitive to a concrete implementation with its own configuration. The app
-never touches it at import time; ``Runtime.load()`` reads it at startup.
-
-Extension sections (e.g. ``cron``) are passed through as raw dicts and
-initialized by their respective extensions during ``Runtime.load()``.
-"""
+"""runtime.json schema and loader."""
 
 from __future__ import annotations
 
@@ -15,108 +7,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .._paths import project_path
 from .errors import ManifestError
 
-# A minimal but extensible JSON Schema for runtime.json.
-# Implementations may add their own config keys; the schema is intentionally
-# permissive at the implementation-config level.
-# Extension sections are listed explicitly so they pass validation.
-SCHEMA: dict[str, Any] = {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "pyxen runtime config",
-    "type": "object",
-    "required": ["version"],
-    "additionalProperties": False,
-    "properties": {
-        "version": {"type": "string", "pattern": r"^\d+$"},
-        "identity": {
-            "type": "object",
-            "required": ["implementation"],
-            "properties": {
-                "implementation": {"type": "string"},
-                "config": {"type": "object"},
-            },
-        },
-        "tokens": {
-            "type": "object",
-            "required": ["implementation"],
-            "properties": {
-                "implementation": {"type": "string"},
-                "config": {"type": "object"},
-            },
-        },
-        "ipc": {
-            "type": "object",
-            "required": ["implementation"],
-            "properties": {
-                "implementation": {"type": "string"},
-                "config": {"type": "object"},
-            },
-        },
-        "pkg": {
-            "type": "object",
-            "required": ["implementation"],
-            "properties": {
-                "implementation": {"type": "string"},
-                "config": {"type": "object"},
-            },
-        },
-        "storage": {
-            "type": "object",
-            "required": ["implementation"],
-            "properties": {
-                "implementation": {"type": "string"},
-                "config": {"type": "object"},
-            },
-        },
-        "secrets": {
-            "type": "object",
-            "required": ["implementation"],
-            "properties": {
-                "implementation": {"type": "string"},
-                "config": {"type": "object"},
-            },
-        },
-        "observability": {
-            "type": "object",
-            "required": ["implementation"],
-            "properties": {
-                "implementation": {"type": "string"},
-                "config": {"type": "object"},
-            },
-        },
-        "cron": {
-            "type": "object",
-            "properties": {
-                "state": {
-                    "type": "object",
-                    "properties": {
-                        "path": {"type": "string"},
-                    },
-                },
-                "jobs": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "required": ["name", "command", "schedule"],
-                        "additionalProperties": False,
-                        "properties": {
-                            "name": {"type": "string"},
-                            "command": {"type": "string"},
-                            "schedule": {"type": "string"},
-                            "enabled": {"type": "boolean"},
-                            "environment": {
-                                "type": "object",
-                                "additionalProperties": {"type": "string"},
-                            },
-                        },
-                    },
-                },
-            },
-        },
-    },
-}
+MANIFEST_SCHEMA = project_path("schemas", "runtime.schema.json")
 
+SECRET_REF_KEY = "$secret"
 PRIMITIVE_NAMES: tuple[str, ...] = (
     "identity",
     "tokens",
@@ -180,17 +76,18 @@ def load_manifest(path: str | Path) -> Manifest:
     return parse_manifest(raw)
 
 
+def _config_has_secret_refs(config: object) -> bool:
+    if isinstance(config, dict):
+        keys = list(config.keys())
+        if keys == [SECRET_REF_KEY] and isinstance(config.get(SECRET_REF_KEY), str):
+            return True
+        return any(_config_has_secret_refs(v) for v in config.values())
+    if isinstance(config, list):
+        return any(_config_has_secret_refs(item) for item in config)
+    return False
+
+
 def parse_manifest(raw: dict[str, Any]) -> Manifest:
-    """Parse and validate a manifest dict (already loaded from JSON).
-
-    Schema validation is intentionally light: we check the top-level shape
-    and that any declared primitive binding has both an implementation name
-    and a config object. Implementations are free to add their own config
-    keys; the schema doesn't try to enumerate them.
-
-    Extension sections are stored as-is in ``Manifest.extensions``. The
-    extension itself validates and processes its config during init.
-    """
     if "version" not in raw:
         raise ManifestError("manifest is missing required field 'version'")
     if not isinstance(raw["version"], str):
@@ -219,6 +116,17 @@ def parse_manifest(raw: dict[str, Any]) -> Manifest:
             name=primitive,
             implementation=impl,
             config=config,
+        )
+
+    # Check for $secret refs in any binding config
+    has_secret_refs = False
+    for binding in bindings.values():
+        if _config_has_secret_refs(binding.config):
+            has_secret_refs = True
+            break
+    if has_secret_refs and "secrets" not in bindings:
+        raise ManifestError(
+            f"config references {SECRET_REF_KEY} but no secrets primitive declared"
         )
 
     extensions: dict[str, Any] = {}
@@ -400,10 +308,10 @@ def _main() -> None:
         "observability",
     }
 
-    # --- SCHEMA is a valid JSON Schema dict ---
-    assert SCHEMA["type"] == "object"
-    assert "version" in SCHEMA["required"]
-    assert set(SCHEMA["properties"].keys()) >= set(PRIMITIVE_NAMES)
+    # --- SCHEMA path points to the JSON file ---
+    assert MANIFEST_SCHEMA.is_file()
+    schema_content = json.loads(MANIFEST_SCHEMA.read_text())
+    assert schema_content["type"] == "object"
 
     # --- cron extension: absent → empty dict ---
     m_no_ext = parse_manifest({"version": "1"})
@@ -440,6 +348,50 @@ def _main() -> None:
         pass
     else:
         raise AssertionError("Manifest should be frozen")
+
+    # --- _config_has_secret_refs top-level ---
+    assert _config_has_secret_refs({SECRET_REF_KEY: "mykey"}) is True
+    assert _config_has_secret_refs({"not_secret": "val"}) is False
+    assert _config_has_secret_refs({SECRET_REF_KEY: "k", "extra": 1}) is False
+
+    # --- _config_has_secret_refs nested in dict ---
+    assert _config_has_secret_refs({"creds": {SECRET_REF_KEY: "k"}}) is True
+    assert _config_has_secret_refs({"a": {"b": {"c": {SECRET_REF_KEY: "deep"}}}}) is True
+
+    # --- _config_has_secret_refs in list ---
+    assert _config_has_secret_refs([{SECRET_REF_KEY: "k"}]) is True
+    assert _config_has_secret_refs([1, "str", {"nested": [{SECRET_REF_KEY: "x"}]}]) is True
+
+    # --- _config_has_secret_refs non-dict/non-list ---
+    assert _config_has_secret_refs("plain string") is False
+    assert _config_has_secret_refs(None) is False
+    assert _config_has_secret_refs(42) is False
+
+    # --- $secret ref without secrets primitive raises ManifestError ---
+    try:
+        parse_manifest({
+            "version": "1",
+            "storage": {
+                "implementation": "bq",
+                "config": {"credentials": {SECRET_REF_KEY: "gcp"}},
+            },
+        })
+    except ManifestError as e:
+        assert SECRET_REF_KEY in str(e)
+    else:
+        raise AssertionError("$secret ref without secrets should raise ManifestError")
+
+    # --- $secret ref with secrets primitive succeeds ---
+    m_ok = parse_manifest({
+        "version": "1",
+        "storage": {
+            "implementation": "bq",
+            "config": {"credentials": {SECRET_REF_KEY: "gcp"}},
+        },
+        "secrets": {"implementation": "dotenv", "config": {}},
+    })
+    assert "secrets" in m_ok.bindings
+    assert "storage" in m_ok.bindings
 
 
 if __name__ == "__main__":
