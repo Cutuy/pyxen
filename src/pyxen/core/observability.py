@@ -63,3 +63,7 @@ def _main() -> None:
         test_observabilityimpl_is_protocol,
         test_span_methods_dont_raise,
     )
+
+
+if __name__ == "__main__":
+    _main()
