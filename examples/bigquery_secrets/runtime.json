@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "secrets": {
+    "implementation": "dotenv",
+    "config": { "path": "./.env" }
+  },
+  "storage": {
+    "implementation": "bq",
+    "config": {
+      "project": "my-gcp-project",
+      "dataset": "my_dataset",
+      "table": "items",
+      "credentials": { "$secret": "GCP_SA_JSON" }
+    }
+  },
+  "observability": {
+    "implementation": "stdout",
+    "config": { "level": "info" }
+  }
+}

@@ -1,0 +1,3 @@
+# No extra dependencies needed beyond pyxen itself.
+# The BigQuery backend uses the `bq` CLI (Google Cloud SDK), not the
+# google-cloud-bigquery Python package.
