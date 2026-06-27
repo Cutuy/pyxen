@@ -380,8 +380,54 @@ TABLE_ANCHOR = "<!-- impl-table -->"
 ROADMAP_ANCHOR = "<!-- roadmap -->"
 
 
-def build_examples_section(examples: list[dict[str, str]]) -> str:
-    return ""
+def _parse_existing_examples(readme: str) -> dict[str, str]:
+    """Extract {name: blurb} from the existing examples table, if any."""
+    result: dict[str, str] = {}
+    m = re.search(r"## Examples\s*\n+(.*?)(?=\n## )", readme, re.DOTALL)
+    if not m:
+        return result
+    for line in m.group(1).split("\n"):
+        # Match: | [`name`](./path/) | blurb |
+        row = re.match(r"\|\s*\[`([^`]+)`\]\([^)]+\)\s*\|\s*(.+)\s*\|", line)
+        if row:
+            name = row.group(1).strip()
+            blurb = row.group(2).strip()
+            if name and name != "Example":
+                result[name] = blurb
+    return result
+
+
+def _one_liner(text: str) -> str:
+    """First sentence, ≤15 words, no markdown code spans, single-line."""
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"`[^`]+`", "", text)  # strip inline code
+    m = re.match(r"([^.?!]+[.?!]?)", text.strip())
+    if not m:
+        return text.strip()[:80]
+    s = m.group(1).strip()
+    words = s.split()
+    if len(words) > 15:
+        s = " ".join(words[:15])
+        if not s.endswith((".", "?", "!")):
+            s += "…"
+    return s
+
+
+def build_examples_section(examples: list[dict[str, str]], existing_readme: str = "") -> str:
+    if not examples:
+        return ""
+    # Preserve existing blurbs for examples already in the README
+    existing = _parse_existing_examples(existing_readme)
+    header = "| Example | What it shows |\n|---|---|"
+    rows = [header]
+    for ex in examples:
+        blurb = existing.get(ex["name"]) or _one_liner(ex.get("blurb", ""))
+        if not blurb:
+            blurb = _one_liner(ex.get("name", "").replace("_", " "))
+        rows.append(f"| [`{ex['name']}`](./{ex['rel_path']}/) | {blurb} |")
+    return "\n".join(rows)
 
 
 def patch_readme(
@@ -459,7 +505,7 @@ def main() -> int:
         key_hint = "yes" if _resolve_api_key() else "no"
         print(f"→ LLM unavailable (api_key={key_hint}, openai package={_has_openai()}) — leaving roadmap as-is")
 
-    new_examples = build_examples_section(examples)
+    new_examples = build_examples_section(examples, current)
     print(f"→ discovered {len(examples)} examples: {', '.join(e['name'] for e in examples) or '(none)'}")
 
     ext_names = [e["name"] for e in extensions]

@@ -1,4 +1,4 @@
-# all_in_one_demo — CLI Agent Playground
+# playground — CLI Agent Playground
 
 An **interactive REPL** that exercises all 7 pyxen primitives in a
 natural dependency graph rather than a serial walk-through. Each user
@@ -32,19 +32,19 @@ real data dependencies on earlier ones.
 ## Quick start
 
 ```bash
-cd examples/all_in_one_demo
+cd examples/playground
 
 # 1. Create your .env (copy the example)
 cp .env.example .env
 
 # 2. Run from repo root
-PYTHONPATH=src python -m examples.all_in_one_demo.main
+PYTHONPATH=src python -m examples.playground.main
 ```
 
 Or run directly from the example directory:
 
 ```bash
-cd examples/all_in_one_demo
+cd examples/playground
 PYTHONPATH=../../src python main.py
 ```
 
@@ -76,5 +76,5 @@ A hermetic `_main()` entry point (discoverable by `pyxen-test`) pipes commands
 into the REPL using in-memory backends — no `.env` or SQLite database required:
 
 ```bash
-PYTHONPATH=src python -c "from examples.all_in_one_demo.main import _main; _main()"
+PYTHONPATH=src python -c "from examples.playground.main import _main; _main()"
 ```

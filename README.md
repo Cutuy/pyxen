@@ -71,13 +71,13 @@ their section in `runtime.json`.
 | Example | What it shows |
 |---|---|
 | [`a2a_chat`](./examples/a2a_chat/) | Agent-to-agent protocol interaction |
-| [`all_in_one_demo`](./examples/all_in_one_demo/) | An interactive REPL that exercises all 7 pyxen primitives in a natural dependency graph rather… |
 | [`bigquery_secrets`](./examples/bigquery_secrets/) | The point: the app never touches credentials, environment variables, or cloud SDK config directly. |
 | [`cron_app`](./examples/cron_app/) | Declarative cron jobs auto-scheduled on startup |
 | [`data_pipeline`](./examples/data_pipeline/) | Same script, different runtime.json = local dev vs production |
 | [`hello_runtime`](./examples/hello_runtime/) | Smallest end-to-end runtime load, exercises 3 primitives |
 | [`notes_app`](./examples/notes_app/) | Plain web app using the runtime — no agents or LLM calls |
 | [`pkg_demo`](./examples/pkg_demo/) | Declare and install dependencies via the pkg primitive |
+| [`playground`](./examples/playground/) | An interactive REPL that exercises all 7 pyxen primitives in a natural dependency graph rather… |
 
 ## Agent distribution artifacts
 

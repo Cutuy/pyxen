@@ -1,4 +1,4 @@
-"""all_in_one_demo — interactive CLI Agent Playground.
+"""playground — interactive CLI Agent Playground.
 
 An interactive REPL that exercises all 7 pyxen primitives in a natural
 dependency graph rather than a serial walk-through. Each user command
@@ -16,7 +16,7 @@ Commands:
 
 Run from the repo root:
 
-    PYTHONPATH=src python examples/all_in_one_demo/main.py
+    PYTHONPATH=src python examples/playground/main.py
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from typing import Any
 from pyxen import Runtime
 from pyxen._paths import project_root
 
-HERE = project_root() / "examples" / "all_in_one_demo"
+HERE = project_root() / "examples" / "playground"
 
 
 def _setup_pythonpath() -> None:
@@ -511,7 +511,7 @@ def _main() -> None:
             assert report_msgs[0]["event"] == "report_generated"
 
             print()
-            print("all_in_one_demo _main() — ALL TESTS PASSED")
+            print("playground _main() — ALL TESTS PASSED")
 
         _setup_pythonpath()
         asyncio.run(go())
