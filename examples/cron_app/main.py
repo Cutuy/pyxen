@@ -23,7 +23,7 @@ from pathlib import Path
 from pyxen import Runtime
 from pyxen._paths import project_root
 
-HERE = Path(__file__).resolve().parent
+HERE = project_root() / "examples" / "cron_app"
 
 
 def _setup_pythonpath() -> None:

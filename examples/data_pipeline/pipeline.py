@@ -28,8 +28,9 @@ import tempfile
 from pathlib import Path
 
 from pyxen import Runtime
+from pyxen._paths import project_root
 
-HERE = Path(__file__).resolve().parent
+HERE = project_root() / "examples" / "data_pipeline"
 
 # A few sample records to seed the source with, for the demo.
 SAMPLE_RECORDS = [
