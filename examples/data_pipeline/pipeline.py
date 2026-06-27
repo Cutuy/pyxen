@@ -64,7 +64,7 @@ async def migrate(source_path: str, dest_path: str) -> int:
 
     # 1. Seed the source (only in this demo; in prod the source is real)
     for record in SAMPLE_RECORDS:
-        await src.storage.put("records", record["id"], record)
+        await src.storage.put("records", str(record["id"]), record)
 
     # 2. Read all records
     records = await src.storage.query("records")
@@ -77,7 +77,7 @@ async def migrate(source_path: str, dest_path: str) -> int:
         span.set_attribute("source_count", len(records))
         for record in records:
             transformed = transform(record)
-            await dst.storage.put("processed", transformed["id"], transformed)
+            await dst.storage.put("processed", str(transformed["id"]), transformed)
         span.set_attribute("written_count", len(records))
 
     return len(records)
@@ -93,7 +93,7 @@ async def migrate_and_verify(source_path: str, dest_path: str) -> int:
     dst = await Runtime.load(dest_path)
 
     for record in SAMPLE_RECORDS:
-        await src.storage.put("records", record["id"], record)
+        await src.storage.put("records", str(record["id"]), record)
 
     records = await src.storage.query("records")
     if not records:
@@ -103,7 +103,7 @@ async def migrate_and_verify(source_path: str, dest_path: str) -> int:
         span.set_attribute("source_count", len(records))
         for record in records:
             transformed = transform(record)
-            await dst.storage.put("processed", transformed["id"], transformed)
+            await dst.storage.put("processed", str(transformed["id"]), transformed)
         span.set_attribute("written_count", len(records))
 
     # Keep references for in-process assertion (test-only).
