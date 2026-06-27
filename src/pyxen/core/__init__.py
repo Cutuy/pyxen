@@ -1,10 +1,4 @@
 """The pyxen core — interfaces, manifest, runtime entry point.
-
-This sub-package contains no concrete implementations. It defines the
-7 primitive interfaces (``IdentityImpl``, ``TokensImpl``, ``IpcImpl``,
-``PkgImpl``, ``StorageImpl``, ``SecretsImpl``, ``ObservabilityImpl``),
-the manifest schema and loader, and the ``Runtime`` class that wires
-everything together based on a ``runtime.json`` file.
 """
 
 from __future__ import annotations
