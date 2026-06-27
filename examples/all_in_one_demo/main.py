@@ -1,10 +1,18 @@
-"""all_in_one_demo — exercise all 7 pyxen primitives + cron extension.
+"""all_in_one_demo — interactive CLI Agent Playground.
 
-A "Dev Session Tracker" CLI app that walks through every primitive
-in a single coherent workflow: identity → secrets → pkg → storage
-→ tokens → observability → ipc → cron.
+An interactive REPL that exercises all 7 pyxen primitives in a natural
+dependency graph rather than a serial walk-through. Each user command
+triggers a multi-step workflow that interleaves 4–6 primitives. State
+persists across commands via ``rt.storage`` so later commands have real
+data dependencies on earlier ones.
 
-Fun output uses ``rich`` if installed; falls back to plain print otherwise.
+Commands:
+  deploy      — identity → pkg → tokens → storage → observability → ipc
+  diagnostic  — identity → secrets → pkg → storage → tokens → observability → ipc → storage
+  report      — identity → secrets → storage → tokens → ipc → observability → storage
+  status      — identity → storage → observability
+  help        — show available commands
+  exit        — leave the playground
 
 Run from the repo root:
 
@@ -15,9 +23,11 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from pyxen import Runtime
 from pyxen._paths import project_root
@@ -66,149 +76,358 @@ def _w(msg: str) -> None:
         print(f"    {msg}")
 
 
-def _summary(rows: list[tuple[str, str]]) -> None:
+def _e(msg: str) -> None:
+    try:
+        from rich.console import Console
+        c = Console()
+        c.print(f"    [red]{msg}[/]")
+    except ImportError:
+        print(f"    {msg}")
+
+
+def _banner() -> None:
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+        c = Console()
+        c.print(Panel.fit(
+            "[bold cyan]CLI Agent Playground[/]\n"
+            "[dim]Exercise all 7 pyxen primitives in an interactive REPL[/]",
+            border_style="cyan",
+        ))
+    except ImportError:
+        print("=" * 50)
+        print("  CLI Agent Playground")
+        print("  Exercise all 7 pyxen primitives in an interactive REPL")
+        print("=" * 50)
+
+
+def _show_help() -> None:
     try:
         from rich.console import Console
         from rich.table import Table
-        from rich import box
         c = Console()
-        t = Table(title="Dev Session Summary", box=box.ROUNDED)
-        t.add_column("Primitive", style="cyan")
-        t.add_column("Status", style="green")
-        for name, status in rows:
-            t.add_row(name, status)
+        t = Table(title="Commands", box=None, show_header=True)
+        t.add_column("Command", style="cyan")
+        t.add_column("Description", style="white")
+        t.add_row("deploy", "Deploy a service (identity → pkg → tokens → storage → observability → ipc)")
+        t.add_row("diagnostic", "Run a diagnostic check (identity → secrets → pkg → storage → tokens → observability → ipc → storage)")
+        t.add_row("report", "Generate a summary report (identity → secrets → storage → tokens → ipc → observability → storage)")
+        t.add_row("status", "Show current agent state (identity → storage → observability)")
+        t.add_row("help", "Show this help")
+        t.add_row("exit", "Exit the playground")
+        c.print(t)
+    except ImportError:
+        print("Commands:")
+        print("  deploy      Deploy a service")
+        print("  diagnostic  Run a diagnostic check")
+        print("  report      Generate a summary report")
+        print("  status      Show current agent state")
+        print("  help        Show this help")
+        print("  exit        Exit the playground")
+
+
+async def cmd_deploy(rt: Runtime) -> None:
+    """Deploy a service — uses identity, pkg, tokens, storage, observability, ipc."""
+    _p("[cmd] deploy", "Deploying a service...")
+
+    me = await rt.identity.current()
+    _d("identity.user", me.id)
+
+    await rt.pkg.ensure_python(["rich"])
+    _d("pkg", "packages ensured")
+
+    check = await rt.tokens.check("deploy", 200)
+    _d("tokens.check", f"allowed={check.allowed}, remaining={check.remaining}")
+    if not check.allowed:
+        _w("insufficient budget — deploy aborted")
+        return
+    await rt.tokens.charge("deploy", tokens=200, dollars=0.0)
+    _d("tokens.charge", "200 tokens charged")
+
+    deploy_id = str(uuid.uuid4())
+    service = f"svc-{deploy_id[:8]}"
+    record = {
+        "deploy_id": deploy_id,
+        "user": me.id,
+        "service": service,
+        "status": "deployed",
+        "deployed_at": _now_iso(),
+    }
+    await rt.storage.put("deployments", deploy_id, record)
+    _d("storage.put", f"deployment {service} recorded")
+
+    async with rt.observability.trace("deploy") as span:
+        span.set_attribute("deploy_id", deploy_id)
+        span.set_attribute("service", service)
+        span.set_attribute("user", me.id)
+        span.log("info", "service deployed", deploy_id=deploy_id)
+    _d("observability.trace", "deploy span emitted")
+
+    await rt.ipc.publish("deploy", {
+        "event": "deployed",
+        "deploy_id": deploy_id,
+        "service": service,
+        "user": me.id,
+    })
+    _d("ipc.publish", f"deploy event published for {service}")
+
+
+async def cmd_diagnostic(rt: Runtime) -> None:
+    """Run a diagnostic — uses identity, secrets, pkg, storage, tokens, observability, ipc, storage."""
+    _p("[cmd] diagnostic", "Running system diagnostic...")
+
+    me = await rt.identity.current()
+    _d("identity.user", me.id)
+
+    api_key = ""
+    try:
+        api_key = await rt.secrets.get("API_KEY")
+        masked = api_key[:6] + "..." + api_key[-4:] if len(api_key) > 10 else "(short)"
+        _d("secrets.get", f"API_KEY={masked}")
+    except Exception:
+        _w("API_KEY not loaded (secrets primitive still exercised)")
+
+    await rt.pkg.ensure_python(["rich"])
+    _d("pkg", "packages ensured")
+
+    prev = await rt.storage.query("diagnostics")
+    _d("storage.query", f"{len(prev)} previous diagnostic(s)")
+
+    check = await rt.tokens.check("diagnostic", 300)
+    _d("tokens.check", f"allowed={check.allowed}, remaining={check.remaining}")
+    if not check.allowed:
+        _w("insufficient budget — diagnostic aborted")
+        return
+    await rt.tokens.charge("diagnostic", tokens=300, dollars=0.0)
+    _d("tokens.charge", "300 tokens charged")
+
+    async with rt.observability.trace("diagnostic") as span:
+        span.set_attribute("user", me.id)
+        span.set_attribute("previous_runs", str(len(prev)))
+        span.log("info", "diagnostic started", api_key_loaded=bool(api_key))
+    _d("observability.trace", "diagnostic span emitted")
+
+    diagnostic_id = str(uuid.uuid4())
+    await rt.ipc.publish("diagnostic", {
+        "event": "diagnostic_run",
+        "diagnostic_id": diagnostic_id,
+        "user": me.id,
+        "previous_runs": len(prev),
+    })
+    _d("ipc.publish", "diagnostic event published")
+
+    result = {
+        "diagnostic_id": diagnostic_id,
+        "user": me.id,
+        "status": "passed",
+        "api_key_loaded": bool(api_key),
+        "previous_diagnostics": len(prev),
+        "ran_at": _now_iso(),
+    }
+    await rt.storage.put("diagnostics", diagnostic_id, result)
+    _d("storage.put", "diagnostic result saved")
+
+
+async def cmd_report(rt: Runtime) -> None:
+    """Generate a report — uses identity, secrets, storage, tokens, ipc, observability, storage."""
+    _p("[cmd] report", "Generating summary report...")
+
+    me = await rt.identity.current()
+    _d("identity.user", me.id)
+
+    api_key = ""
+    try:
+        api_key = await rt.secrets.get("API_KEY")
+        masked = api_key[:6] + "..." + api_key[-4:] if len(api_key) > 10 else "(short)"
+        _d("secrets.get", f"API_KEY={masked}")
+    except Exception:
+        _w("API_KEY not loaded")
+
+    deployments = await rt.storage.query("deployments")
+    diagnostics = await rt.storage.query("diagnostics")
+    sessions = await rt.storage.query("sessions")
+    _d("storage.query", f"{len(deployments)} deployment(s), {len(diagnostics)} diagnostic(s)")
+
+    check = await rt.tokens.check("report", 400)
+    _d("tokens.check", f"allowed={check.allowed}, remaining={check.remaining}")
+    if not check.allowed:
+        _w("insufficient budget — report aborted")
+        return
+    await rt.tokens.charge("report", tokens=400, dollars=0.0)
+    _d("tokens.charge", "400 tokens charged")
+
+    report_id = str(uuid.uuid4())
+    await rt.ipc.publish("report", {
+        "event": "report_generated",
+        "report_id": report_id,
+        "user": me.id,
+        "deployments": len(deployments),
+        "diagnostics": len(diagnostics),
+    })
+    _d("ipc.publish", "report event published")
+
+    async with rt.observability.trace("report") as span:
+        span.set_attribute("report_id", report_id)
+        span.set_attribute("user", me.id)
+        span.set_attribute("num_deployments", str(len(deployments)))
+        span.set_attribute("num_diagnostics", str(len(diagnostics)))
+        span.log("info", "report generated",
+                 deployments=len(deployments),
+                 diagnostics=len(diagnostics))
+    _d("observability.trace", "report span emitted")
+
+    content_lines = [
+        f"Summary Report ({_now_iso()})",
+        f"User: {me.id}",
+        f"Deployments: {len(deployments)}",
+        f"Diagnostics: {len(diagnostics)}",
+        f"Sessions: {len(sessions)}",
+    ]
+    if deployments:
+        content_lines.append("--- Deployments ---")
+        for d in deployments:
+            content_lines.append(f"  {d.get('service', '?')}: {d.get('status', '?')}")
+    if diagnostics:
+        content_lines.append("--- Diagnostics ---")
+        for d in diagnostics:
+            content_lines.append(f"  {d.get('diagnostic_id', '?')[:12]}...: {d.get('status', '?')}")
+    content = "\n".join(content_lines)
+
+    report = {
+        "report_id": report_id,
+        "user": me.id,
+        "content": content,
+        "num_deployments": len(deployments),
+        "num_diagnostics": len(diagnostics),
+        "generated_at": _now_iso(),
+    }
+    await rt.storage.put("reports", report_id, report)
+    _d("storage.put", "report saved")
+
+
+async def cmd_status(rt: Runtime) -> None:
+    """Show agent state — uses identity, storage, observability."""
+    _p("[cmd] status", "Querying current agent state...")
+
+    me = await rt.identity.current()
+    _d("identity.user", me.id)
+
+    deployments = await rt.storage.query("deployments")
+    diagnostics = await rt.storage.query("diagnostics")
+    reports = await rt.storage.query("reports")
+    sessions = await rt.storage.query("sessions")
+
+    _d("storage.sessions", len(sessions))
+    _d("storage.deployments", len(deployments))
+    _d("storage.diagnostics", len(diagnostics))
+    _d("storage.reports", len(reports))
+
+    async with rt.observability.trace("status") as span:
+        span.set_attribute("user", me.id)
+        span.set_attribute("num_sessions", str(len(sessions)))
+        span.set_attribute("num_deployments", str(len(deployments)))
+        span.set_attribute("num_diagnostics", str(len(diagnostics)))
+        span.set_attribute("num_reports", str(len(reports)))
+        span.log("info", "status checked")
+
+    _summary_table([
+        ("sessions", str(len(sessions))),
+        ("deployments", str(len(deployments))),
+        ("diagnostics", str(len(diagnostics))),
+        ("reports", str(len(reports))),
+    ])
+
+
+def _summary_table(rows: list[tuple[str, str]]) -> None:
+    try:
+        from rich import box
+        from rich.console import Console
+        from rich.table import Table
+        c = Console()
+        t = Table(title="Agent State", box=box.ROUNDED)
+        t.add_column("Namespace", style="cyan")
+        t.add_column("Count", style="green")
+        for name, count in rows:
+            t.add_row(name, count)
         c.print()
         c.print(t)
     except ImportError:
         print()
-        print("─" * 50)
-        print("  Dev Session Summary")
-        print("─" * 50)
-        for name, status in rows:
-            print(f"  {name:20s} {status}")
-        print("─" * 50)
+        print("─" * 40)
+        print("  Agent State")
+        print("─" * 40)
+        for name, count in rows:
+            print(f"  {name:20s} {count}")
+        print("─" * 40)
 
 
-async def _ipc_listener(rt: Runtime) -> None:
-    try:
-        async for msg in rt.ipc.subscribe("session"):
-            _d("[ipc] received", msg.payload)
-    except asyncio.CancelledError:
-        pass
+CMDS: dict[str, object] = {
+    "deploy": cmd_deploy,
+    "diagnostic": cmd_diagnostic,
+    "report": cmd_report,
+    "status": cmd_status,
+}
 
 
-async def main() -> None:
-    rt = await Runtime.load(HERE / "runtime.json")
-    _primitives: list[str] = []
-
-    # ── 1. Identity ──────────────────────────────────────────────────
-    _primitives.append("identity")
-    _p("[1/8] Identity", "env — who's running this?")
+async def _repl(rt: Runtime) -> None:
+    """Read commands from stdin and dispatch them until exit."""
+    _banner()
     me = await rt.identity.current()
-    _d("user id", me.id)
-    _d("source", me.source)
+    _p("session.start", f"Welcome, {me.id}! Type 'help' for commands.")
 
-    # ── 2. Secrets ───────────────────────────────────────────────────
-    _primitives.append("secrets")
-    _p("[2/8] Secrets", "dotenv — load API key from .env")
-    try:
-        api_key = await rt.secrets.get("API_KEY")
-        masked = api_key[:6] + "..." + api_key[-4:] if len(api_key) > 10 else "(short)"
-        _d("API_KEY", masked)
-    except Exception as e:
-        api_key = ""
-        _w(f"API_KEY not found: {e}")
-        _w("  create .env with API_KEY=sk-... to exercise secrets")
-
-    # ── 3. Pkg ───────────────────────────────────────────────────────
-    _primitives.append("pkg")
-    _p("[3/8] Pkg", "pip — install pretty-printing deps")
-    await rt.pkg.ensure_python(["rich"])
-    _d("ensure_python", "rich")
-    await rt.pkg.ensure_from_manifest("requirements.txt")
-    _d("ensure_from_manifest", "requirements.txt")
-
-    # ── 4. Storage ───────────────────────────────────────────────────
-    _primitives.append("storage")
-    _p("[4/8] Storage", "local_sqlite — persist session record")
     session_id = str(uuid.uuid4())
-    session = {
+    await rt.storage.put("sessions", session_id, {
         "session_id": session_id,
         "user": me.id,
         "started_at": _now_iso(),
-        "primitives": _primitives[:],
-    }
-    await rt.storage.put("sessions", session_id, session)
-    stored = await rt.storage.get("sessions", session_id)
-    ok = stored is not None and stored.get("session_id") == session_id
-    _d("session stored", f"{session_id[:12]}...  round-trip={'OK' if ok else 'FAIL'}")
+    })
 
-    # ── 5. Tokens ────────────────────────────────────────────────────
-    _primitives.append("tokens")
-    _p("[5/8] Tokens", "json_budget — check budget & charge")
-    check = await rt.tokens.check("demo-run", 500)
-    _d("budget check", f"allowed={check.allowed}, remaining={check.remaining}")
-    if check.allowed:
-        await rt.tokens.charge("demo-run", tokens=500, dollars=0.0)
-        _d("charged", "500 tokens (demo-run)")
+    while True:
+        try:
+            raw = await asyncio.to_thread(input, "pyxen> ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
 
-    # ── 6. Observability ─────────────────────────────────────────────
-    _primitives.append("observability")
-    _p("[6/8] Observability", "stdout — trace the session")
-    async with rt.observability.trace("all-in-one-demo") as span:
-        span.set_attribute("session_id", session_id)
-        span.set_attribute("user", me.id)
-        span.set_attribute("primitives", ",".join(_primitives))
-        span.log("info", "all seven primitives exercised")
-    _d("trace emitted", "all-in-one-demo (see JSON lines above)")
+        cmd = raw.strip().lower()
 
-    # ── 7. IPC ───────────────────────────────────────────────────────
-    _primitives.append("ipc")
-    _p("[7/8] IPC", "inproc — publish/subscribe events")
-    listener = asyncio.create_task(_ipc_listener(rt))
-    await asyncio.sleep(0.05)
-    await rt.ipc.publish("session", {"event": "session_start", "session_id": session_id, "user": me.id})
-    await rt.ipc.publish("session", {"event": "primitives_done", "session_id": session_id, "primitives": _primitives[:]})
-    await asyncio.sleep(0.05)
-    listener.cancel()
-    try:
-        await listener
-    except asyncio.CancelledError:
-        pass
+        if cmd in ("exit", "quit"):
+            break
+        elif cmd == "help":
+            _show_help()
+        elif cmd == "":
+            continue
+        elif cmd in CMDS:
+            try:
+                await CMDS[cmd](rt)  # type: ignore[operator]
+            except Exception as exc:
+                _e(f"command failed: {exc}")
+        else:
+            _w(f"unknown command: {cmd!r} (try 'help')")
 
-    # ── 8. Cron ──────────────────────────────────────────────────────
-    _p("[8/8] Cron", "extension — list scheduled jobs")
-    cron_jobs = 0
-    if hasattr(rt, "cron"):
-        jobs = await rt.cron.list()
-        cron_jobs = len(jobs)
-        _d("jobs declared", cron_jobs)
-        for job in jobs:
-            s = await rt.cron.status(job.name)
-            status = "active" if s and s.enabled else "disabled"
-            _d(f"  [{status}] {job.name}", job.schedule)
-    else:
-        _w("(no cron backend available)")
+    _p("session.end", "Goodbye!")
 
-    # ── Summary ──────────────────────────────────────────────────────
-    _summary([
-        ("Identity", me.id),
-        ("Secrets", "loaded" if api_key else "skipped (no .env)"),
-        ("Pkg", "packages ensured"),
-        ("Storage", "session stored"),
-        ("Tokens", f"allowed={check.allowed}"),
-        ("Observability", "trace emitted"),
-        ("IPC", "2 events published"),
-        ("Cron", f"{cron_jobs} job(s)"),
-    ])
 
+async def _async_main() -> None:
+    rt = await Runtime.load(HERE / "runtime.json")
+    await _repl(rt)
+
+
+def main() -> None:
+    _setup_pythonpath()
+    asyncio.run(_async_main())
+
+
+# ── Self-test ────────────────────────────────────────────────────────────────
 
 def _main() -> None:
     """Self-test entry point for pyxen-test discovery.
 
-    Creates hermetic temp files so the test doesn't depend on the
-    user's .env or external state.
+    Creates a hermetic runtime with in-memory backends and pipes commands
+    through the REPL loop headlessly, verifying storage and IPC outcomes.
     """
+    import io
     import json
     import tempfile
 
@@ -234,58 +453,64 @@ def _main() -> None:
 
         rt_path = Path(tmp) / "runtime.json"
         rt_path.write_text(json.dumps(manifest))
-
         os.environ["PYXEN_IDENTITY_ID"] = "test-bot"
 
         async def go() -> None:
             rt = await Runtime.load(str(rt_path))
 
-            # 1. Identity
-            me = await rt.identity.current()
-            assert me.id == "test-bot"
+            deploy_msgs: list[dict[str, Any]] = []
+            diag_msgs: list[dict[str, Any]] = []
+            report_msgs: list[dict[str, Any]] = []
 
-            # 2. Secrets
-            key = await rt.secrets.get("API_KEY")
-            assert key == "sk-test-fake-key-for-self-test"
+            async def _collect(topic: str, dest: list[dict[str, Any]]) -> None:
+                async for msg in rt.ipc.subscribe(topic):
+                    dest.append(msg.payload)
 
-            # 3. Pkg
-            await rt.pkg.ensure_python(["rich>=13.0"])
-            await rt.pkg.ensure_from_manifest("requirements.txt")
-
-            # 4. Storage
-            await rt.storage.put("sessions", me.id, {"user": me.id, "status": "started"})
-            record = await rt.storage.get("sessions", me.id)
-            assert record is not None
-            assert record["status"] == "started"
-
-            # 5. Tokens
-            check = await rt.tokens.check("gpt-4o", 500)
-            assert check.allowed is True
-            await rt.tokens.charge("gpt-4o", tokens=500, dollars=0.0)
-
-            # 6. Observability
-            async with rt.observability.trace("dev-session") as span:
-                span.set_attribute("user", me.id)
-                span.log("info", "test session")
-
-            # 7. IPC
-            received: list[dict] = []
-
-            async def listener() -> None:
-                async for msg in rt.ipc.subscribe("events"):
-                    received.append(msg.payload)
-                    return
-
-            task = asyncio.create_task(listener())
+            collectors = [
+                asyncio.create_task(_collect("deploy", deploy_msgs)),
+                asyncio.create_task(_collect("diagnostic", diag_msgs)),
+                asyncio.create_task(_collect("report", report_msgs)),
+            ]
             await asyncio.sleep(0.05)
-            await rt.ipc.publish("events", {"event": "ping"})
-            await asyncio.wait_for(task, timeout=2.0)
-            assert len(received) == 1
-            assert received[0]["event"] == "ping"
 
-            # Verify no cron in this test manifest
-            assert "cron" not in rt.manifest.extensions
+            old_stdin = sys.stdin
+            try:
+                sys.stdin = io.StringIO("deploy\ndiagnostic\nreport\nstatus\nexit\n")
+                await _repl(rt)
+            finally:
+                sys.stdin = old_stdin
 
+            await asyncio.sleep(0.1)
+            for t in collectors:
+                t.cancel()
+            await asyncio.gather(*collectors, return_exceptions=True)
+
+            deploys = await rt.storage.query("deployments")
+            diags = await rt.storage.query("diagnostics")
+            reports = await rt.storage.query("reports")
+
+            assert len(deploys) == 1, f"expected 1 deployment, got {len(deploys)}"
+            assert deploys[0]["user"] == "test-bot"
+            assert deploys[0]["status"] == "deployed"
+
+            assert len(diags) == 1, f"expected 1 diagnostic, got {len(diags)}"
+            assert diags[0]["user"] == "test-bot"
+            assert diags[0]["status"] == "passed"
+
+            assert len(reports) == 1, f"expected 1 report, got {len(reports)}"
+            assert reports[0]["num_deployments"] == 1
+            assert reports[0]["num_diagnostics"] == 1
+
+            assert len(deploy_msgs) == 1
+            assert deploy_msgs[0]["event"] == "deployed"
+
+            assert len(diag_msgs) == 1
+            assert diag_msgs[0]["event"] == "diagnostic_run"
+
+            assert len(report_msgs) == 1
+            assert report_msgs[0]["event"] == "report_generated"
+
+            print()
             print("all_in_one_demo _main() — ALL TESTS PASSED")
 
         _setup_pythonpath()
@@ -294,4 +519,4 @@ def _main() -> None:
 
 if __name__ == "__main__":
     _setup_pythonpath()
-    asyncio.run(main())
+    asyncio.run(_async_main())
