@@ -72,3 +72,4 @@ opencode.json
 
 # Package management lockfiles (not using uv/pipenv/poetry for this project)
 uv.lock
+.worktrees/
