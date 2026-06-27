@@ -29,11 +29,11 @@ from .observability import ObservabilityImpl
 from .secrets import SecretsImpl
 
 if TYPE_CHECKING:
-    from pyxen.impl.identity import IdentityImpl
-    from pyxen.impl.ipc import IpcImpl
-    from pyxen.impl.pkg import PkgImpl
-    from pyxen.impl.storage import StorageImpl
-    from pyxen.impl.tokens import TokensImpl
+    from .identity import IdentityImpl
+    from .ipc import IpcImpl
+    from .pkg import PkgImpl
+    from .storage import StorageImpl
+    from .tokens import TokensImpl
 
 # Map a primitive name to:
 #   (the core interface, the default impl module path under ``pyxen.impl``)

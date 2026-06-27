@@ -24,12 +24,12 @@ from pyxen._paths import project_root
 HERE = project_root() / "examples" / "bigquery_secrets"
 
 
-async def query_table(runtime_path: str) -> list[dict]:
+async def query_table(runtime_path: str) -> list[dict[str, object]]:
     """Load the runtime and query the configured storage backend."""
     rt = await Runtime.load(runtime_path)
     async with rt.observability.trace("bigquery_query") as span:
         span.set_attribute("impl", rt.manifest.bindings["storage"].implementation)
-        rows = await rt.storage.query("items")
+        rows: list[dict[str, object]] = await rt.storage.query("items")
         span.set_attribute("row_count", len(rows))
     return rows
 
