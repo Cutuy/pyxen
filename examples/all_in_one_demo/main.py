@@ -122,11 +122,11 @@ async def main() -> None:
 
     # ── 3. Pkg ───────────────────────────────────────────────────────
     _primitives.append("pkg")
-    _p("[3/8] Pkg", "dry_run — verify/snapshot dependencies")
+    _p("[3/8] Pkg", "pip — install pretty-printing deps")
     await rt.pkg.ensure_python(["rich"])
-    _d("ensure_python", "rich (dry run)")
+    _d("ensure_python", "rich")
     await rt.pkg.ensure_from_manifest("requirements.txt")
-    _d("ensure_from_manifest", "requirements.txt (dry run)")
+    _d("ensure_from_manifest", "requirements.txt")
 
     # ── 4. Storage ───────────────────────────────────────────────────
     _primitives.append("storage")
@@ -194,7 +194,7 @@ async def main() -> None:
     _summary([
         ("Identity", me.id),
         ("Secrets", "loaded" if api_key else "skipped (no .env)"),
-        ("Pkg", "dry-run OK"),
+        ("Pkg", "packages ensured"),
         ("Storage", "session stored"),
         ("Tokens", f"allowed={check.allowed}"),
         ("Observability", "trace emitted"),
