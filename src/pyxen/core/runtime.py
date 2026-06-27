@@ -16,7 +16,7 @@ from __future__ import annotations
 import importlib
 import inspect
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from .errors import ImplementationNotFoundError, ManifestError
 from .manifest import (
@@ -28,6 +28,12 @@ from .manifest import (
 from .observability import ObservabilityImpl
 from .secrets import SecretsImpl
 
+if TYPE_CHECKING:
+    from pyxen.impl.identity import IdentityImpl
+    from pyxen.impl.ipc import IpcImpl
+    from pyxen.impl.pkg import PkgImpl
+    from pyxen.impl.storage import StorageImpl
+    from pyxen.impl.tokens import TokensImpl
 
 # Map a primitive name to:
 #   (the core interface, the default impl module path under ``pyxen.impl``)
@@ -47,13 +53,7 @@ PRIMITIVE_TABLE: dict[str, str] = {
 class Runtime:
     """The runtime instance, bound to a particular manifest.
 
-    A ``Runtime`` is loaded once at app startup:
-
         rt = await Runtime.load("runtime.json")
-
-    The resulting object's attributes (``rt.identity``, ``rt.tokens``,
-    etc.) are the configured implementations. Extensions declared in the
-    manifest are loaded and exposed as ``rt.<name>`` (e.g. ``rt.cron``).
     """
 
     manifest: Manifest
@@ -62,40 +62,92 @@ class Runtime:
         self.manifest = manifest
         self._impls: dict[str, Any] = {}
 
+    # ── Lazy-loading typed accessors ──────────────────────────────────
+
+    @property
+    def identity(self) -> IdentityImpl:
+        impl: IdentityImpl = self._ensure("identity")
+        return impl
+
+    @property
+    def tokens(self) -> TokensImpl:
+        impl: TokensImpl = self._ensure("tokens")
+        return impl
+
+    @property
+    def ipc(self) -> IpcImpl:
+        impl: IpcImpl = self._ensure("ipc")
+        return impl
+
+    @property
+    def pkg(self) -> PkgImpl:
+        impl: PkgImpl = self._ensure("pkg")
+        return impl
+
+    @property
+    def storage(self) -> StorageImpl:
+        impl: StorageImpl = self._ensure("storage")
+        return impl
+
+    @property
+    def secrets(self) -> SecretsImpl:
+        impl: SecretsImpl = self._ensure("secrets")
+        return impl
+
+    @property
+    def observability(self) -> ObservabilityImpl:
+        impl: ObservabilityImpl = self._ensure("observability")
+        return impl
+
+    def _ensure(self, name: str) -> Any:
+        """Resolve, build, and cache a primitive impl on first access."""
+        impl = self._impls.get(name)
+        if impl is not None:
+            return impl
+
+        binding = self.manifest.bindings.get(name)
+        if binding is None:
+            raise AttributeError(
+                f"runtime has no '{name}' primitive; "
+                f"declare it in runtime.json or check the name"
+            ) from None
+
+        needs_secrets = _config_has_secret_refs(binding.config)
+        if needs_secrets:
+            secrets_name = "secrets"
+            if secrets_name not in self._impls:
+                if secrets_name not in self.manifest.bindings:
+                    raise ManifestError(
+                        f"config references {SECRET_REF_KEY} but no "
+                        f"secrets primitive declared"
+                    )
+                self._ensure(secrets_name)
+
+        impl = self._instantiate(
+            name,
+            binding.implementation,
+            binding.config,
+            secrets=self._impls.get("secrets") if needs_secrets else None,
+            observability=self._impls.get("observability"),
+        )
+        self._impls[name] = impl
+        return impl
+
     @classmethod
     async def load(cls, path: str | Path) -> Runtime:
+        """Parse a manifest and return a Runtime.
+
+        Validates that every declared primitive's impl module exists
+        (``import`` + checks for ``build``), but defers calling
+        ``build()`` until the attribute is first accessed.
+        """
         manifest = load_manifest(path)
         rt = cls(manifest)
 
-        # Phase 0: build primitives with no dependencies
-        for dep_name in ("secrets", "observability"):
-            binding = manifest.bindings.get(dep_name)
-            if binding is not None:
-                impl = await cls._instantiate(
-                    dep_name, binding.implementation, binding.config,
-                )
-                rt._impls[dep_name] = impl
-
-        # Phase 1: build remaining primitives, injecting dependencies
         for primitive, binding in manifest.bindings.items():
-            if primitive in ("secrets", "observability"):
-                continue
-            needs_secrets = _config_has_secret_refs(binding.config)
-            if needs_secrets and "secrets" not in rt._impls:
-                raise ManifestError(
-                    f"config references {SECRET_REF_KEY} but no secrets primitive declared"
-                )
-            impl = await cls._instantiate(
-                primitive,
-                binding.implementation,
-                binding.config,
-                secrets=rt._impls.get("secrets") if needs_secrets else None,
-                observability=rt._impls.get("observability"),
-            )
-            rt._impls[primitive] = impl
+            cls._import_impl_module(primitive, binding.implementation)
 
         await rt._init_extensions(Path(path).resolve().parent)
-
         return rt
 
     async def _init_extensions(self, app_dir: Path | None) -> None:
@@ -111,14 +163,8 @@ class Runtime:
                 self._impls[name] = ext
 
     @staticmethod
-    async def _instantiate(
-        primitive: str,
-        implementation: str,
-        config: dict[str, Any],
-        *,
-        secrets: SecretsImpl | None = None,
-        observability: ObservabilityImpl | None = None,
-    ) -> Any:
+    def _import_impl_module(primitive: str, implementation: str) -> None:
+        """Import and validate that an impl module exists with a ``build`` function."""
         package = PRIMITIVE_TABLE.get(primitive)
         if package is None:
             raise ImplementationNotFoundError(
@@ -132,21 +178,32 @@ class Runtime:
                 f"implementation module '{module_name}' not found "
                 f"(for primitive '{primitive}'): {exc}"
             ) from exc
-        build = getattr(module, "build", None)
-        if build is None:
+        if not hasattr(module, "build"):
             raise ImplementationNotFoundError(
                 f"implementation module '{module_name}' is missing a 'build' function"
             )
+
+    @staticmethod
+    def _instantiate(
+        primitive: str,
+        implementation: str,
+        config: dict[str, Any],
+        *,
+        secrets: SecretsImpl | None = None,
+        observability: ObservabilityImpl | None = None,
+    ) -> Any:
+        """Call ``build()`` on a previously-validated impl module and return the instance."""
+        package = PRIMITIVE_TABLE.get(primitive)
+        module_name = f"{package}.{implementation}"
+        module = importlib.import_module(module_name)
+        build = getattr(module, "build")
         sig = inspect.signature(build).parameters
         kwargs: dict[str, Any] = {}
         if secrets is not None and "secrets" in sig:
             kwargs["secrets"] = secrets
         if observability is not None and "observability" in sig:
             kwargs["observability"] = observability
-        result = build(config, **kwargs)
-        if hasattr(result, "__await__"):
-            result = await result
-        return result
+        return build(config, **kwargs)
 
     def __getattr__(self, name: str) -> Any:
         # Only consulted for attributes not found via normal lookup.
