@@ -20,6 +20,8 @@ from pathlib import Path
 
 from pyxen import Runtime
 
+HERE = Path(__file__).resolve().parent
+
 
 async def query_table(runtime_path: str) -> list[dict]:
     """Load the runtime and query the configured storage backend."""
@@ -43,21 +45,12 @@ async def _test_main() -> None:
             'GCP_SA_JSON={"type":"service_account","project_id":"test","private_key":"FAKE"}\n'
         )
 
-        manifest = {
-            "version": "1",
-            "secrets": {
-                "implementation": "dotenv",
-                "config": {"path": str(env_path)},
-            },
-            "storage": {
-                "implementation": "inmemory",
-                "config": {},
-            },
-            "observability": {
-                "implementation": "null",
-                "config": {},
-            },
-        }
+        manifest = json.loads(
+            (HERE / "runtime.json").read_text()
+        )
+        manifest["secrets"]["config"]["path"] = str(env_path)
+        manifest["storage"] = {"implementation": "inmemory", "config": {}}
+        manifest["observability"] = {"implementation": "null", "config": {}}
         rt_path = Path(tmp) / "runtime.json"
         rt_path.write_text(json.dumps(manifest))
 
@@ -93,13 +86,12 @@ def main() -> None:
         )
         sys.exit(1)
 
-    here = Path(__file__).resolve().parent
-    runtime_path = here / "runtime.json"
+    runtime_path = HERE / "runtime.json"
     if not runtime_path.is_file():
         print(f"Error: runtime.json not found at {runtime_path}", file=sys.stderr)
         sys.exit(1)
 
-    os.chdir(here)
+    os.chdir(HERE)
     rows = asyncio.run(query_table(str(runtime_path)))
     print(f"Queried {len(rows)} row(s) from BigQuery")
     for r in rows:

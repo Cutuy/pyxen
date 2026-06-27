@@ -17,15 +17,17 @@ from __future__ import annotations
 
 import asyncio
 import os
+
 from pathlib import Path
 
 from pyxen import Runtime
+from pyxen._paths import project_root
 
 HERE = Path(__file__).resolve().parent
 
 
 def _setup_pythonpath() -> None:
-    src = Path(__file__).resolve().parents[2] / "src"
+    src = project_root() / "src"
     if "PYTHONPATH" not in os.environ and src.is_dir():
         os.environ["PYTHONPATH"] = str(src)
 

@@ -24,9 +24,12 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
+
 from pathlib import Path
 
 from pyxen import Runtime
+
+HERE = Path(__file__).resolve().parent
 
 # A few sample records to seed the source with, for the demo.
 SAMPLE_RECORDS = [
@@ -111,9 +114,8 @@ async def migrate_and_verify(source_path: str, dest_path: str) -> int:
 def _main() -> None:
     """Test entry point. Runs the pipeline against in-memory backends and
     asserts the right number of records made it through."""
-    here = Path(__file__).resolve().parent
-    source_manifest = (here / "source.json").read_text()
-    dest_manifest = (here / "dest.json").read_text()
+    source_manifest = (HERE / "source.json").read_text()
+    dest_manifest = (HERE / "dest.json").read_text()
 
     async def go() -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -139,13 +141,12 @@ def _main() -> None:
 if __name__ == "__main__":
     # The script's normal entry: just run the migration against the bundled manifests
     import sys
-    here = Path(__file__).resolve().parent
 
     if "--test" in sys.argv:
         # Run the self-test (with a fresh in-process seed)
         _main()
     else:
         # Real run
-        os.chdir(here)
+        os.chdir(HERE)
         count = asyncio.run(migrate("source.json", "dest.json"))
         print(f"migrated {count} records from source to dest")

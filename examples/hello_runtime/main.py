@@ -20,6 +20,7 @@ import os
 from pathlib import Path
 
 from pyxen import Runtime
+from pyxen._paths import project_root
 
 HERE = Path(__file__).resolve().parent
 
@@ -44,6 +45,6 @@ async def main() -> None:
 
 if __name__ == "__main__":
     # Allow the example to run from the repo root without installing.
-    if "PYTHONPATH" not in os.environ and (Path(__file__).resolve().parents[2] / "src").is_dir():
-        os.environ["PYTHONPATH"] = str(Path(__file__).resolve().parents[2] / "src")
+    if "PYTHONPATH" not in os.environ and (project_root() / "src").is_dir():
+        os.environ["PYTHONPATH"] = str(project_root() / "src")
     asyncio.run(main())
