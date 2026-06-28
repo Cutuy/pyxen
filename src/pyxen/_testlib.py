@@ -156,8 +156,10 @@ def run_tests(*tests: Callable[..., Any], label: str = "") -> None:
     summary(passed, failed, label=label)
 
 
-async def arun_tests(*tests: Callable[..., Any], label: str = "") -> None:
+async def arun_tests(*tests: Callable[..., Any], label: str = "") -> int:
     """Run zero-argument async ``test_*`` functions, auto-naming each.
+
+    Returns the number of failed tests.
 
     Example::
 
@@ -177,4 +179,5 @@ async def arun_tests(*tests: Callable[..., Any], label: str = "") -> None:
         else:
             failed += 1
     summary(passed, failed, label=label)
+    return failed
 

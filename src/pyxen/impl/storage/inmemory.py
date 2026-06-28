@@ -46,10 +46,12 @@ def build(config: dict[str, object]) -> InMemoryStorage:
 def _main() -> None:
     """Test entry point for inmemory storage impl. Thorough coverage."""
     import asyncio
+    import sys
+
     from pyxen._testlib import arun_tests
     from pyxen.core import QueryFilter
 
-    async def _run_tests() -> None:
+    async def _run_tests() -> int:
         s = build({})
 
         async def test_put_get() -> None:
@@ -122,7 +124,7 @@ def _main() -> None:
             assert await s.delete("ns", "a") is False
             assert await s.delete("nonexistent", "k") is False
 
-        await arun_tests(
+        return await arun_tests(
             test_put_get,
             test_overwrite,
             test_missing,
@@ -140,10 +142,8 @@ def _main() -> None:
             test_delete_missing,
         )
 
-    try:
-        asyncio.run(_run_tests())
-    except Exception:
-        pass
+    rc = asyncio.run(_run_tests())
+    sys.exit(rc)
 
 
 if __name__ == "__main__":
