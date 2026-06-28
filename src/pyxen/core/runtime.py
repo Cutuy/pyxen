@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from .identity import IdentityImpl
     from .ipc import IpcImpl
     from .pkg import PkgImpl
+    from .sandbox import SandboxImpl
     from .storage import StorageImpl
     from .tokens import TokensImpl
 
@@ -47,6 +48,7 @@ PRIMITIVE_TABLE: dict[str, str] = {
     "storage": "pyxen.impl.storage",
     "secrets": "pyxen.impl.secrets",
     "observability": "pyxen.impl.observability",
+    "sandbox": "pyxen.impl.sandbox",
 }
 
 
@@ -97,6 +99,11 @@ class Runtime:
     @property
     def observability(self) -> ObservabilityImpl:
         impl: ObservabilityImpl = self._ensure("observability")
+        return impl
+
+    @property
+    def sandbox(self) -> SandboxImpl:
+        impl: SandboxImpl = self._ensure("sandbox")
         return impl
 
     def _ensure(self, name: str) -> Any:
@@ -238,6 +245,7 @@ def _main() -> None:
                     "tokens": {"implementation": "json_budget", "config": {"path": str(Path(tmp) / "b.json")}},
                     "ipc": {"implementation": "inproc", "config": {}},
                     "pkg": {"implementation": "dry_run", "config": {}},
+                    "sandbox": {"implementation": "wasi", "config": {"wasm_file": "nonexistent.wasm"}},
                     "storage": {"implementation": "inmemory", "config": {}},
                     "secrets": {"implementation": "dotenv", "config": {"path": str(Path(tmp) / ".env")}},
                     "observability": {"implementation": "null", "config": {}},
@@ -252,6 +260,7 @@ def _main() -> None:
                 assert rt.storage is not None
                 assert rt.secrets is not None
                 assert rt.observability is not None
+                assert rt.sandbox is not None
                 me = await rt.identity.current()
                 assert me.id == "anonymous"
                 assert me.source == "env"
@@ -268,7 +277,7 @@ def _main() -> None:
                     span.set_attribute("k", "v")
                     span.log("info", "msg", extra=42)
                 assert rt.manifest.version == "1"
-                assert len(rt.manifest.bindings) == 7
+                assert len(rt.manifest.bindings) == 8
 
         async def test_partial_manifest() -> None:
             with tempfile.TemporaryDirectory() as tmp:

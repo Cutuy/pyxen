@@ -45,6 +45,7 @@ pyxen doctor      # verify impls are importable
 | `ipc` | Message another process | `a2a`, `inproc`, `mcp` |
 | `observability` | Emit a trace / log | `file`, `null`, `openai_tracing`, `stdout` |
 | `pkg` | Dependencies present? | `dry_run`, `pip`, `uv` |
+| `sandbox` |  | `wasi` |
 | `secrets` | Get a credential | `dotenv`, `local_file` |
 | `storage` | Persist a record | `bq`, `gcs`, `inmemory`, `local_fs_mount`, `local_sqlite`, `redis`, `router`, `spanner` |
 | `tokens` | Within LLM budget? | `json_budget`, `openai_usage` |

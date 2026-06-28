@@ -11,12 +11,14 @@ from .errors import (
     ObservabilityError,
     PkgError,
     PyxenError,
+    SandboxError,
     SecretsError,
     StorageError,
     TokenBudgetExceeded,
 )
 from .identity import Credential, Identity, IdentityImpl
 from .ipc import IpcImpl, Message
+from .sandbox import SandboxConfig, SandboxImpl, SandboxResult
 from .manifest import (
     MANIFEST_SCHEMA,
 )
@@ -57,6 +59,10 @@ __all__ = [
     "PyxenError",
     "QueryFilter",
     "Runtime",
+    "SandboxConfig",
+    "SandboxError",
+    "SandboxImpl",
+    "SandboxResult",
     "SecretsError",
     "SecretsImpl",
     "Snapshot",

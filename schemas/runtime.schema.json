@@ -19,6 +19,7 @@
     "storage":         { "$ref": "#/$defs/primitive" },
     "secrets":         { "$ref": "#/$defs/primitive" },
     "observability":   { "$ref": "#/$defs/primitive" },
+    "sandbox":         { "$ref": "#/$defs/primitive" },
     "cron": {
       "type": "object",
       "description": "Declarative cron jobs. Jobs are auto-scheduled on runtime load via the OS-native backend (crontab on Linux/macOS, schtasks on Windows). The {APP_DIR} placeholder in command is resolved to the runtime.json directory at schedule time.",

@@ -43,5 +43,9 @@ class ObservabilityError(PyxenError):
     """Raised by observability primitives when telemetry emission fails."""
 
 
+class SandboxError(PyxenError):
+    """Raised by sandbox primitives when execution fails."""
+
+
 class ExtensionError(PyxenError):
     """Raised when a runtime extension cannot be loaded or initialized."""

@@ -18,6 +18,7 @@ PRIMITIVE_NAMES: tuple[str, ...] = (
     "tokens",
     "ipc",
     "pkg",
+    "sandbox",
     "storage",
     "secrets",
     "observability",
@@ -163,13 +164,14 @@ def _main() -> None:
             "tokens": {"implementation": "json_budget", "config": {"path": "/tmp/b.json"}},
             "ipc": {"implementation": "inproc", "config": {}},
             "pkg": {"implementation": "dry_run", "config": {}},
+            "sandbox": {"implementation": "wasi", "config": {"wasm_file": "app.wasm"}},
             "storage": {"implementation": "inmemory", "config": {}},
             "secrets": {"implementation": "dotenv", "config": {"path": "/tmp/.env"}},
             "observability": {"implementation": "stdout", "config": {"level": "info"}},
         }
         m_full = parse_manifest(raw)
         assert m_full.version == "1"
-        assert len(m_full.bindings) == 7
+        assert len(m_full.bindings) == 8
         assert m_full.get("storage").implementation == "inmemory"
         assert m_full.get("storage").config == {}
         assert m_full.get("tokens").config == {"path": "/tmp/b.json"}
@@ -318,6 +320,7 @@ def _main() -> None:
             "tokens",
             "ipc",
             "pkg",
+            "sandbox",
             "storage",
             "secrets",
             "observability",
