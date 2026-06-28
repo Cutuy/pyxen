@@ -42,7 +42,7 @@ try:
         OTLPSpanExporter,
     )
     from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import Status, StatusCode, TracerProvider
+    from opentelemetry.sdk.trace import Status, StatusCode, TracerProvider  # type: ignore[attr-defined]
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
     _HAS_OTEL = True
@@ -134,8 +134,8 @@ class OpenTelemetryObservability:
         resource = Resource(attributes={"service.name": service_name})
         tracer_provider = TracerProvider(resource=resource)
         exporter = OTLPSpanExporter(
-            endpoint=endpoint,
-            headers=headers,
+            endpoint=str(endpoint) if endpoint is not None else None,
+            headers=str(headers) if headers is not None else None,
         )
         processor = BatchSpanProcessor(exporter)
         tracer_provider.add_span_processor(processor)
@@ -189,7 +189,7 @@ def _main() -> None:
 
     from pyxen._testlib import arun_tests
 
-    async def _run_tests() -> None:
+    async def _full_run_tests() -> None:
         obs = build({})
         try:
             async def test_set_attribute_and_log() -> None:
@@ -225,7 +225,7 @@ def _main() -> None:
         finally:
             pass
 
-    asyncio.run(_run_tests())
+    asyncio.run(_full_run_tests())
 
 
 if __name__ == "__main__":

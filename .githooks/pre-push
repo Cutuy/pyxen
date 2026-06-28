@@ -15,6 +15,7 @@ else
 fi
 
 PYTHONPATH="src:$PYTHONPATH"
+export PYTHONPATH
 
 echo "→ updating README (primitives + extensions + examples + roadmap)..."
 "$PYTHON" scripts/update-readme.py

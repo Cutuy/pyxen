@@ -37,7 +37,7 @@ import threading
 from typing import Any
 
 try:
-    from google.cloud import storage
+    from google.cloud import storage  # type: ignore[attr-defined]
     from google.oauth2 import service_account
 
     _HAS_GCS = True
@@ -97,7 +97,7 @@ class GcsStorage:
                 )
             elif self._credentials_json is not None:
                 creds_info = json.loads(self._credentials_json)
-                creds = service_account.Credentials.from_service_account_info(creds_info)
+                creds = service_account.Credentials.from_service_account_info(creds_info)  # type: ignore[no-untyped-call]
                 self._client = storage.Client(project=self._project, credentials=creds)
             else:
                 self._client = storage.Client(project=self._project)

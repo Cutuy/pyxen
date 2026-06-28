@@ -101,12 +101,12 @@ class SpannerStorage:
 
             if self._credentials_path is not None:
                 self._client = spanner.Client.from_service_account_json(
-                    self._credentials_path, project=self._project
+                    self._credentials_path, project=self._project  # type: ignore[no-untyped-call]
                 )
             elif self._credentials_json is not None:
                 creds_info = json.loads(self._credentials_json)
                 creds = service_account.Credentials.from_service_account_info(
-                    creds_info
+                    creds_info  # type: ignore[no-untyped-call]
                 )
                 self._client = spanner.Client(
                     project=self._project, credentials=creds
