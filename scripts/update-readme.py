@@ -451,7 +451,7 @@ def patch_readme(
     new_ext_section = new_ext_table + "\n" + EXT_BLURB + "\n"
 
     # Replace primitive table
-    result = _replace_section(result, "## The 7 primitives", new_table)
+    result = _replace_section(result, "## Primitives", new_table)
 
     # Replace extensions
     result = _replace_section(result, "## Extensions", new_ext_section)
