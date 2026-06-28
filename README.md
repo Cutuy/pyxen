@@ -43,11 +43,11 @@ pyxen doctor      # verify impls are importable
 |---|---|---|
 | `identity` | Who's calling? | `env`, `keychain` |
 | `ipc` | Message another process | `a2a`, `inproc`, `mcp` |
-| `observability` | Emit a trace / log | `file`, `null`, `openai_tracing`, `stdout` |
+| `observability` | Emit a trace / log | `file`, `null`, `openai_tracing`, `opentelemetry`, `stdout` |
 | `pkg` | Dependencies present? | `dry_run`, `pip`, `uv` |
 | `sandbox` |  | `wasi` |
 | `secrets` | Get a credential | `dotenv`, `local_file` |
-| `storage` | Persist a record | `bq`, `gcs`, `inmemory`, `local_fs_mount`, `local_sqlite`, `redis`, `router`, `spanner` |
+| `storage` | Persist a record | `bq`, `gcs`, `inmemory`, `local_fs_mount`, `local_sqlite`, `redis`, `router`, `s3`, `spanner` |
 | `tokens` | Within LLM budget? | `json_budget`, `openai_usage` |
 
 ## Extensions
