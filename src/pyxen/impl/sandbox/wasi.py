@@ -32,7 +32,7 @@ from ...core.sandbox import SandboxConfig, SandboxResult
 logger = logging.getLogger(__name__)
 
 try:
-    import wasmtime
+    import wasmtime  # type: ignore[import-not-found]
 
     HAS_WASMTIME = True
 except ImportError:
@@ -48,12 +48,20 @@ class WasiSandbox:
     def __init__(self, config: dict[str, object]) -> None:
         self._config = config
         self._wasm_file = Path(str(config.get("wasm_file", "app.wasm")))
+        packages_raw = config.get("packages", [])
+        packages = list(packages_raw) if isinstance(packages_raw, list) else []
+        env_raw = config.get("env", {})
+        env = dict(env_raw) if isinstance(env_raw, dict) else {}
+        timeout_raw = config.get("timeout", 0)
+        timeout = int(timeout_raw) if isinstance(timeout_raw, (int, float)) else 0
+        provider_raw = config.get("provider_config", config)
+        provider_config = dict(provider_raw) if isinstance(provider_raw, dict) else {}
         self._sandbox_config = SandboxConfig(
-            packages=list(config.get("packages", []) or []),
-            env=dict(config.get("env", {}) or {}),
+            packages=packages,
+            env=env,
             network=bool(config.get("network", False)),
-            timeout=int(config.get("timeout", 0)),
-            provider_config=dict(config.get("provider_config", config)),
+            timeout=timeout,
+            provider_config=provider_config,
         )
         self._started = False
         self._engine: wasmtime.Engine | None = None
@@ -93,7 +101,8 @@ class WasiSandbox:
             if env_vars:
                 wasi_config.env = env_vars
 
-            dirs: list[str] = list(self._config.get("dirs", []) or [])
+            dirs_raw = self._config.get("dirs", [])
+            dirs: list[str] = list(dirs_raw) if isinstance(dirs_raw, list) else []
             if dirs:
                 wasi_config.preopen_dirs = dirs
 
