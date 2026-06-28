@@ -19,6 +19,7 @@ from ...core.ipc import Message
 try:
     from mcp.client.session import ClientSession as _McpClientSession
     from mcp.client.stdio import stdio_client as _mcp_stdio_client
+    from mcp.client.stdio import StdioServerParameters as _StdioServerParameters
     from mcp.client.sse import sse_client as _mcp_sse_client
     _HAS_MCP = True
 except ImportError:
@@ -52,7 +53,8 @@ class McpIpc:
                 "Install with: pip install pyxen[mcp]"
             )
         self._config = config
-        self._timeout_seconds = float(config.get("timeout_seconds", 30))
+        timeout_val = config.get("timeout_seconds", 30)
+        self._timeout_seconds = float(timeout_val) if isinstance(timeout_val, (int, float)) else 30.0
         agents_raw = config.get("agents", {})
         if not isinstance(agents_raw, dict):
             raise RuntimeError(
@@ -70,64 +72,63 @@ class McpIpc:
                 f"Available agents: {list(self._agents.keys())}"
             )
         transport_type = str(agent.get("transport", "stdio"))
-        try:
-            if transport_type == "stdio":
-                command = agent.get("command")
-                if not command or not isinstance(command, list):
-                    raise RuntimeError(
-                        f"MCP agent '{agent_name}': 'command' must be a list "
-                        f"of strings for stdio transport"
-                    )
-                read, write = await _mcp_stdio_client(command)
-            elif transport_type == "sse":
-                url = agent.get("url")
-                if not url:
-                    raise RuntimeError(
-                        f"MCP agent '{agent_name}': 'url' is required for sse "
-                        f"transport"
-                    )
-                read, write = await _mcp_sse_client(str(url))
-            else:
-                raise RuntimeError(
-                    f"MCP agent '{agent_name}': unknown transport "
-                    f"'{transport_type}' (expected 'stdio' or 'sse')"
-                )
-        except Exception as exc:
-            raise RuntimeError(
-                f"MCP connect failed for agent '{agent_name}': {exc}"
-            ) from exc
 
-        try:
-            async with _McpClientSession(read, write) as session:
-                await session.initialize()
-                result = await asyncio.wait_for(
-                    session.call_tool(tool, arguments),
-                    timeout=self._timeout_seconds,
+        if transport_type == "stdio":
+            raw_cmd = agent.get("command")
+            if not raw_cmd or not isinstance(raw_cmd, list):
+                raise RuntimeError(
+                    f"MCP agent '{agent_name}': 'command' must be a list "
+                    f"of strings for stdio transport"
                 )
-                payload: dict[str, Any] = {}
-                if hasattr(result, "content"):
-                    texts: list[str] = []
-                    for item in result.content:
-                        if hasattr(item, "text"):
-                            texts.append(item.text)
-                    if len(texts) == 1:
-                        try:
-                            payload = json.loads(texts[0])
-                        except (json.JSONDecodeError, TypeError):
-                            payload = {"text": texts[0]}
-                    elif texts:
-                        payload = {"texts": texts}
-                payload["_is_error"] = getattr(result, "isError", False)
-                return payload
-        except asyncio.TimeoutError:
+            cmd_list: list[str] = [str(c) for c in raw_cmd]
+            params = _StdioServerParameters(command=cmd_list[0], args=cmd_list[1:])
+            transport_cm = _mcp_stdio_client(params)
+        elif transport_type == "sse":
+            raw_url = agent.get("url")
+            if not raw_url:
+                raise RuntimeError(
+                    f"MCP agent '{agent_name}': 'url' is required for sse "
+                    f"transport"
+                )
+            transport_cm = _mcp_sse_client(str(raw_url))
+        else:
             raise RuntimeError(
-                f"MCP call_tool timed out for agent '{agent_name}' "
-                f"after {self._timeout_seconds}s"
+                f"MCP agent '{agent_name}': unknown transport "
+                f"'{transport_type}' (expected 'stdio' or 'sse')"
             )
-        except Exception as exc:
-            raise RuntimeError(
-                f"MCP call_tool failed for agent '{agent_name}': {exc}"
-            ) from exc
+
+        async with transport_cm as (read, write):
+            try:
+                async with _McpClientSession(read, write) as session:
+                    await session.initialize()
+                    result = await asyncio.wait_for(
+                        session.call_tool(tool, arguments),
+                        timeout=self._timeout_seconds,
+                    )
+                    payload: dict[str, Any] = {}
+                    if hasattr(result, "content"):
+                        texts: list[str] = []
+                        for item in result.content:
+                            if hasattr(item, "text"):
+                                texts.append(item.text)
+                        if len(texts) == 1:
+                            try:
+                                payload = json.loads(texts[0])
+                            except (json.JSONDecodeError, TypeError):
+                                payload = {"text": texts[0]}
+                        elif texts:
+                            payload = {"texts": texts}
+                    payload["_is_error"] = getattr(result, "isError", False)
+                    return payload
+            except asyncio.TimeoutError:
+                raise RuntimeError(
+                    f"MCP call_tool timed out for agent '{agent_name}' "
+                    f"after {self._timeout_seconds}s"
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"MCP call_tool failed for agent '{agent_name}': {exc}"
+                ) from exc
 
     async def send(self, target: str, payload: dict[str, Any]) -> Message:
         correlation_id = str(uuid.uuid4())
