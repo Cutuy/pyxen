@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
+
+from ...core.tokens import Budget, CheckResult
 
 try:
     from agents.usage import Usage
@@ -84,39 +86,28 @@ class OpenAIUsageTokens:
 
     async def check(
         self, model: str, estimated_tokens: int = 0
-    ) -> dict[str, Any]:
+    ) -> CheckResult:
         """Check if the estimated tokens fit within the daily limit."""
-        current_total = self._usage.total_tokens
-        allowed = (current_total + estimated_tokens) <= self._daily_limit
+        budget = Budget(daily_limit=self._daily_limit, spent=self._usage.total_tokens)
+        would_spend = budget.spent + max(0, estimated_tokens)
+        allowed = would_spend <= budget.daily_limit
+        return CheckResult(
+            allowed=allowed,
+            remaining=max(0, budget.daily_limit - would_spend),
+            reason=None if allowed else "over daily limit",
+            budget=budget,
+        )
 
-        return {
-            "allowed": allowed,
-            "remaining": max(0, self._daily_limit - current_total),
-            "current_usage": {
-                "total": current_total,
-                "input": self._usage.input_tokens,
-                "output": self._usage.output_tokens,
-                "reasoning": self._usage.output_tokens_details.reasoning_tokens,
-            },
-            "model": model,
-        }
-
-    async def consume(
-        self,
-        model: str,
-        input_tokens: int,
-        output_tokens: int,
-        reasoning_tokens: int = 0,
-    ) -> None:
-        """Record actual token consumption."""
+    async def charge(self, model: str, tokens: int, dollars: float) -> None:
+        """Record actual token consumption after a call finishes."""
         from agents.usage import InputTokensDetails, OutputTokensDetails  # type: ignore[attr-defined]
         self._usage.add(Usage(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            output_tokens_details=OutputTokensDetails(reasoning_tokens=reasoning_tokens),
+            input_tokens=tokens,
+            output_tokens=0,
+            output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
             input_tokens_details=InputTokensDetails(cached_tokens=0),
-            total_tokens=input_tokens + output_tokens,
-            requests=1
+            total_tokens=tokens,
+            requests=1,
         ))
         self._save()
 
@@ -141,30 +132,35 @@ def _main() -> None:
 
             async def test_initial_check() -> None:
                 res = await t.check("gpt-4o", 100)
-                assert res["allowed"] is True
-                assert res["current_usage"]["total"] == 0
+                assert res.allowed is True
+                assert res.remaining == 900
+                assert res.budget is not None
+                assert res.budget.spent == 0
 
-            async def test_consume() -> None:
-                await t.consume("gpt-4o", input_tokens=50, output_tokens=50)
+            async def test_charge() -> None:
+                await t.charge("gpt-4o", tokens=100, dollars=0.0)
 
             async def test_check_again() -> None:
                 res2 = await t.check("gpt-4o", 100)
-                assert res2["current_usage"]["total"] == 100
-                assert res2["remaining"] == 900
+                assert res2.budget is not None
+                assert res2.budget.spent == 100
+                assert res2.remaining == 800
 
             async def test_persistence_reload() -> None:
                 t2 = build({"path": log_path, "daily_limit": 1000})
                 res3 = await t2.check("gpt-4o", 0)
-                assert res3["current_usage"]["total"] == 100
+                assert res3.budget is not None
+                assert res3.budget.spent == 100
 
             async def test_limit_enforcement() -> None:
                 t2 = build({"path": log_path, "daily_limit": 1000})
                 res4 = await t2.check("gpt-4o", 1000)
-                assert res4["allowed"] is False
+                assert res4.allowed is False
+                assert res4.remaining == 0
 
             await arun_tests(
                 test_initial_check,
-                test_consume,
+                test_charge,
                 test_check_again,
                 test_persistence_reload,
                 test_limit_enforcement,
