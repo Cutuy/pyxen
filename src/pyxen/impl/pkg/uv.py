@@ -93,7 +93,7 @@ class UvPkg:
         against the output of ``uv pip list --format=json``.
         """
         if not self._requirements.is_file():
-            snap = await self.snapshot()
+            await self.snapshot()
             return VerificationResult(satisfied=True, missing=[])
 
         installed_stdout = await _run([self._uv, "pip", "list", "--format=json"])

@@ -93,7 +93,7 @@ class PipPkg:
         against the output of ``pip list --format=json``.
         """
         if not self._requirements.is_file():
-            snap = await self.snapshot()
+            await self.snapshot()
             return VerificationResult(satisfied=True, missing=[])
 
         installed_stdout = await _run(["pip", "list", "--format=json"])

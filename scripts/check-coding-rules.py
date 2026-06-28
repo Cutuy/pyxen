@@ -221,7 +221,7 @@ def _fix_testlib(text: str) -> tuple[str, bool]:
     try:
         dedented = textwrap.dedent(body_text)
         source_lines = dedented.splitlines()
-        tree = ast.parse(dedented)
+        ast.parse(dedented)
     except SyntaxError:
         return _fix_testlib_fallback(text)
 
@@ -414,7 +414,6 @@ def _get_func_body(
             continue
         def_indent = len(m.group(1))
         body_start = -1
-        body_indent = -1
 
         for j in range(i + 1, len(lines)):
             if not lines[j].strip():
@@ -422,7 +421,6 @@ def _get_func_body(
             indent = len(lines[j]) - len(lines[j].lstrip())
             if body_start < 0:
                 body_start = j
-                body_indent = indent
             elif indent <= def_indent and lines[j].strip():
                 return i, body_start, j
 
